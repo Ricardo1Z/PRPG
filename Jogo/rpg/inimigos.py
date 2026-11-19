@@ -1,4 +1,5 @@
-from combatentes import Combatente
+from .combatentes import Combatente
+import copy
 import random
 
 class Inimigo(Combatente):
@@ -110,10 +111,29 @@ class BugOriginal(Inimigo):
 slime = Slime("Slime de Código", 30, 30, 8, 2, 1, 100)
 inseto = Inseto("Inseto Bugado", 45, 45, 12, 4, 2, 60)
 aranha = Aranha("Aranha de Firewall", 35, 35, 15, 3, 3, 80) # FUGIR
-goblin = Goblin("Goblin de Sintaxe", 40, 1, 10, 1, 4, 75) # FUGIR
+goblin = Goblin("Goblin de Sintaxe", 40, 40, 10, 1, 4, 75) # FUGIR
 golem = Golem("Golem de Erro de Compilação", 150, 150, 22, 12, 1, 40) 
 doppelganger = Doppelganger("Plágiador de Código", 100, 100, 20, 6, 2, 50) # FUGIR
 virus = Virus("Vírus Corrompido", 120, 120, 18, 5, 2, 80)
 dragao = Dragao("Dragão do Infinito", 250, 250, 28, 10, 1, 95)
 compilador = Compilador("Compilador Supremo", 300, 300, 25, 14, 1, 95)
 bug_original = BugOriginal("Bug Original", 500, 500, 35, 12, 1, 95)
+
+
+# Modelos de inimigos. Use criar_inimigo() para ter uma cópia nova a cada luta
+INIMIGOS = {
+    "slime": slime,
+    "inseto": inseto,
+    "aranha": aranha,
+    "goblin": goblin,
+    "golem": golem,
+    "doppelganger": doppelganger,
+    "virus": virus,
+    "dragao": dragao,
+    "compilador": compilador,
+    "bug_original": bug_original,
+}
+
+
+def criar_inimigo(chave):
+    return copy.deepcopy(INIMIGOS[chave])
