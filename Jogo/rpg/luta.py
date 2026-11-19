@@ -1,5 +1,6 @@
 
 import random
+from .registro import registrar
 
 
 class Luta:
@@ -118,15 +119,21 @@ class Luta:
                     combatente.defender()
 
                 elif acao == "fugir":
-                    print(f"{combatente.nome} fugiu!")
+                    registrar(f"{combatente.nome} fugiu!")
 
                     self.grupo_inimigos.remove(combatente)
                     self.ordem_turnos.remove(combatente)
 
-                    if self.indice_turno >= len(self.ordem_turnos):
-                        self.indice_turno = 0
-
                     self.verificar_fim()
+                    if self.resultado:
+                        return
+
+                    # Recua um passo para o avancar_turno() cair no próximo
+                    # combatente VIVO (evita travar num jogador morto)
+                    self.indice_turno = (
+                        self.indice_turno - 1
+                    ) % len(self.ordem_turnos)
+                    self.avancar_turno()
                     return
 
                 self.avancar_turno()
