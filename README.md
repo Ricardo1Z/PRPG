@@ -1,4 +1,4 @@
-# 💻 Code Roguelike
+# 💻 PRPG
 
 Um jogo **Roguelike com temática de programação**, desenvolvido em Python utilizando a biblioteca Pygame.
 
