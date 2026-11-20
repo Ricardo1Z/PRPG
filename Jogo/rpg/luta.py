@@ -2,11 +2,25 @@
 import random
 from .registro import registrar
 
+from .habilidades import (
+    picada_mortal,
+    salto_de_bits,
+    cadeia_de_codigos,
+    meteoro_de_variavel,
+    investida_assincrona,
+    rajada_de_scripts,
+    escudo_de_compilacao,
+    codigo_divino
+)
 
 class Luta:
     def __init__(self, grupo_jogador, grupo_inimigos):
         self.grupo_jogador = grupo_jogador
         self.grupo_inimigos = grupo_inimigos
+
+        # Restaura as habilidades no início da luta
+        for personagem in self.grupo_jogador:
+            personagem.reiniciar_habilidades()
 
         self.participantes = grupo_jogador + grupo_inimigos
 
@@ -60,33 +74,122 @@ class Luta:
             combatente = self.combatente_atual()
 
             if combatente and combatente.vida > 0:
+
+                # Remove o Escudo de Compilação
+                # quando chega novamente o turno do Paladino
+                if (
+                    combatente in self.grupo_jogador
+                    and getattr(combatente, "escudo_compilacao_ativo", False)
+                ):
+                   combatente.defesa -= 20
+                   combatente.escudo_compilacao_ativo = False
+
+                   print(f"Escudo de Compilação de {combatente.nome} terminou!")
+
                 return
 
-    def executar_acao_jogador(self, acao, alvo=None):
-        combatente = self.combatente_atual()
+def executar_acao_jogador(self, acao, alvo=None):
+    combatente = self.combatente_atual()
 
-        if combatente not in self.grupo_jogador:
+    if combatente not in self.grupo_jogador:
+        return
+
+    if combatente.vida <= 0:
+        return
+
+    if acao == "atacar":
+        if alvo not in self.grupo_inimigos:
             return
 
-        if combatente.vida <= 0:
+        if alvo.vida <= 0:
             return
 
-        if acao == "atacar":
-            if alvo not in self.grupo_inimigos:
-                return
+        combatente.atacar(alvo)
 
-            if alvo.vida <= 0:
-                return
+    elif acao == "defender":
+        combatente.defender()
 
-            combatente.atacar(alvo)
-
-        elif acao == "defender":
-            combatente.defender()
-
-        else:
+    elif acao == "picada_mortal":
+        if "picada_mortal" not in combatente.usos_habilidades:
             return
 
-        self.avancar_turno()
+        if alvo not in self.grupo_inimigos or alvo.vida <= 0:
+            return
+
+        if picada_mortal(combatente, alvo):
+            self.avancar_turno()
+
+        return
+
+    elif acao == "salto_de_bits":
+        if "salto_de_bits" not in combatente.usos_habilidades:
+            return
+
+        if alvo not in self.grupo_inimigos or alvo.vida <= 0:
+            return
+
+        if salto_de_bits(combatente, alvo):
+            self.avancar_turno()
+
+        return
+
+    elif acao == "cadeia_de_codigos":
+        if "cadeia_de_codigos" not in combatente.usos_habilidades:
+            return
+
+        if cadeia_de_codigos(combatente, self.grupo_inimigos):
+            self.avancar_turno()
+
+        return
+
+    elif acao == "meteoro_de_variavel":
+        if "meteoro_de_variavel" not in combatente.usos_habilidades:
+            return
+
+        if meteoro_de_variavel(combatente, self.grupo_inimigos):
+            self.avancar_turno()
+
+            return
+
+    
+    elif acao == "investida_assincrona":
+        if alvo not in self.grupo_inimigos or alvo.vida <= 0:
+            return
+
+        if investida_assincrona(combatente, alvo):
+            self.avancar_turno()
+
+            return
+
+    elif acao == "rajada_de_scripts":
+        if alvo not in self.grupo_inimigos or alvo.vida <= 0:
+            return
+
+        if rajada_de_scripts(combatente, alvo):
+            self.avancar_turno()
+
+            return
+
+    elif acao == "escudo_de_compilacao":
+        if escudo_de_compilacao(combatente):
+            self.avancar_turno()
+
+            return
+
+    elif acao == "codigo_divino":
+        if alvo not in self.grupo_inimigos or alvo.vida <= 0:
+            return
+
+        if codigo_divino(combatente, alvo):
+            self.avancar_turno()
+
+            return
+
+    else:
+        return
+
+    self.avancar_turno()
+
 
     def atualizar(self):
         self.verificar_fim()
@@ -139,7 +242,3 @@ class Luta:
                 self.avancar_turno()
         else:
             self.tempo_inimigo = 0
-
-
-
-
