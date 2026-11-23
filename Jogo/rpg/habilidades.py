@@ -1,10 +1,11 @@
+from .registro import registrar
 
 def picada_mortal(personagem, alvo):
     if personagem.vida <= 0:
         return False
 
     if alvo.vida <= 0:
-        print("Esse inimigo já foi derrotado!")
+        registrar("Esse inimigo já foi derrotado!")
         return False
 
     if not personagem.consumir_uso_habilidade("picada_mortal"):
@@ -13,10 +14,13 @@ def picada_mortal(personagem, alvo):
     dano = 20
     alvo.vida = max(0, alvo.vida - dano)
 
-    print(
+    registrar(
         f"{personagem.nome} usou Picada Mortal "
         f"e causou {dano} de dano em {alvo.nome}!"
     )
+
+    if alvo.defendendo:
+        alvo.remover_defesa()
 
     return True
 
@@ -34,7 +38,7 @@ def salto_de_bits(personagem, alvo):
 
     alvo.vida = max(0, alvo.vida - dano)
 
-    print(
+    registrar(
         f"{personagem.nome} usou Salto de Bits "
         f"e causou {dano} de dano em {alvo.nome}!"
     )
@@ -55,20 +59,20 @@ def cadeia_de_codigos(personagem, grupo_inimigos):
     ]
 
     if not inimigos_vivos:
-        print("Não existem inimigos vivos!")
+        registrar("Não existem inimigos vivos!")
         return False
 
     if not personagem.consumir_uso_habilidade("cadeia_de_codigos"):
         return False
 
-    print(f"{personagem.nome} lançou Cadeia de Códigos!")
+    registrar(f"{personagem.nome} lançou Cadeia de Códigos!")
 
     for inimigo in inimigos_vivos:
         dano = max(1, 25 - inimigo.defesa)
 
         inimigo.vida = max(0, inimigo.vida - dano)
 
-        print(
+        registrar(
             f"{inimigo.nome} recebeu {dano} de dano! "
             f"Vida restante: {inimigo.vida}"
         )
@@ -89,13 +93,13 @@ def meteoro_de_variavel(personagem, grupo_inimigos):
     ]
 
     if not inimigos_vivos:
-        print("Não existem inimigos vivos!")
+        registrar("Não existem inimigos vivos!")
         return False
 
     if not personagem.consumir_uso_habilidade("meteoro_de_variavel"):
         return False
 
-    print(f"{personagem.nome} lançou Meteoro de Variável!")
+    registrar(f"{personagem.nome} lançou Meteoro de Variável!")
 
     for inimigo in inimigos_vivos:
         # Ignora 50% da defesa
@@ -105,7 +109,7 @@ def meteoro_de_variavel(personagem, grupo_inimigos):
 
         inimigo.vida = max(0, inimigo.vida - dano)
 
-        print(
+        registrar(
             f"{inimigo.nome} recebeu {dano} de dano! "
             f"Vida restante: {inimigo.vida}"
         )
@@ -130,9 +134,9 @@ def investida_assincrona(personagem, alvo):
 
     alvo.vida = max(0, alvo.vida - dano)
 
-    print(f"{personagem.nome} usou Investida Assíncrona!")
-    print(f"{alvo.nome} recebeu {dano} de dano!")
-    print(f"Vida restante: {alvo.vida}")
+    registrar(f"{personagem.nome} usou Investida Assíncrona!")
+    registrar(f"{alvo.nome} recebeu {dano} de dano!")
+    registrar(f"Vida restante: {alvo.vida}")
 
     if alvo.defendendo:
         alvo.remover_defesa()
@@ -147,7 +151,7 @@ def rajada_de_scripts(personagem, alvo):
     if not personagem.consumir_uso_habilidade("rajada_de_scripts"):
         return False
 
-    print(f"{personagem.nome} usou Rajada de Scripts!")
+    registrar(f"{personagem.nome} usou Rajada de Scripts!")
 
     for golpe in range(3):
         if alvo.vida <= 0:
@@ -156,8 +160,8 @@ def rajada_de_scripts(personagem, alvo):
         dano = max(1, 15 - alvo.defesa)
         alvo.vida = max(0, alvo.vida - dano)
 
-        print(f"Golpe {golpe + 1}: {dano} de dano!")
-        print(f"Vida restante de {alvo.nome}: {alvo.vida}")
+        registrar(f"Golpe {golpe + 1}: {dano} de dano!")
+        registrar(f"Vida restante de {alvo.nome}: {alvo.vida}")
 
         if alvo.defendendo:
             alvo.remover_defesa()
@@ -174,8 +178,8 @@ def escudo_de_compilacao(personagem):
     personagem.defesa += 20
     personagem.escudo_compilacao_ativo = True
 
-    print(f"{personagem.nome} usou Escudo de Compilação!")
-    print(f"Defesa aumentada em 20! Defesa atual: {personagem.defesa}")
+    registrar(f"{personagem.nome} usou Escudo de Compilação!")
+    registrar(f"Defesa aumentada em 20! Defesa atual: {personagem.defesa}")
 
     return True
 
@@ -193,9 +197,9 @@ def codigo_divino(personagem, alvo):
 
     alvo.vida = max(0, alvo.vida - dano)
 
-    print(f"{personagem.nome} usou Código Divino!")
-    print(f"{alvo.nome} recebeu {dano} de dano!")
-    print(f"Vida restante: {alvo.vida}")
+    registrar(f"{personagem.nome} usou Código Divino!")
+    registrar(f"{alvo.nome} recebeu {dano} de dano!")
+    registrar(f"Vida restante: {alvo.vida}")
 
     if alvo.defendendo:
         alvo.remover_defesa()

@@ -1,6 +1,6 @@
 import pygame
 
-from .telas import LARGURA, ALTURA, carregar
+from .telas import LARGURA, ALTURA, SPRITES, carregar
 from .luta import Luta
 from .inimigos import criar_inimigo
 from .registro import mensagens, limpar, registrar
@@ -35,14 +35,55 @@ CAIXA_MENU = pygame.Rect(404, 529, 472, 166)
 PAINEL_LOG = pygame.Rect(300, 6, 640, 140)           # tamanho de mensagens.png
 AREA_TEXTO = pygame.Rect(334, 44, 572, 64)           # parte de dentro da moldura (3 linhas)
 
+# Quadro de habilidades (quadro_habilidades.png): aparece logo ACIMA da caixa
+# de menu, com um botão para cada habilidade e um VOLTAR no fim.
+ALTURA_QUADRO = 370
+# parte de dentro da moldura, em fração do quadro: (esquerda, cima, direita, baixo)
+INTERIOR_QUADRO = (0.12, 0.09, 0.88, 0.92)
+TAM_BOTAO_HAB = (172, 54)      # tamanho dos botões dentro do quadro
+
 TAM_PERSONAGEM = 96
-TAM_INIMIGO = 120
+TAM_INIMIGO = 120  # só para o placeholder (usado se o sprite do inimigo não existir)
+
+# ---------- sprites dos inimigos ----------
+# Procurados em assets/sprites/inimigos/ e em assets/sprites/.
+# chave do inimigo (INIMIGOS em inimigos.py) -> nome do arquivo
+ARQUIVOS_INIMIGOS = {
+    'slime': 'slime.png',
+    'inseto': 'inseto.png',
+    'aranha': 'aranha.png',
+    'goblin': 'goblin.png',
+    'golem': 'golem.png',
+    'doppelganger': 'plagiador.png',
+    'virus': 'virus.png',
+    'dragao': 'dragao.png',
+    'compilador': 'compilador.png',
+    'bug_original': 'bug_original.png',
+}
+
+# Altura (em pixels NA TELA) de cada inimigo; a largura acompanha o sprite.
+# Os chefes ficam maiores que os inimigos comuns.
+ALTURA_INIMIGO = {
+    'slime': 76, 'goblin': 82, 'inseto': 72, 'aranha': 96, 'doppelganger': 90,
+    'golem': 128, 'virus': 146, 'dragao': 226, 'compilador': 218,
+    'bug_original': 256,
+}
+ALTURA_PADRAO_INIMIGO = 120
+
+# Se preferir um aumento fixo e inteiro (pixel-art sempre nítida), coloque
+# aqui um número (ex.: 3): todo sprite fica "tamanho do arquivo x 3" e a
+# tabela de alturas acima é ignorada.
+ESCALA_INIMIGOS = None
+
+# Posição dos inimigos: "chão" (onde ficam os pés) e centro de cada coluna.
+CHAO_INIMIGOS = 500
+CENTROS_INIMIGOS = {1: [1010], 2: [1110, 880]}
 
 # Formação do grupo: 2 linhas x 2 colunas.
 # A linha de cima (1º e 2º escolhidos) fica NA FRENTE (mais perto dos
 # inimigos); a de baixo fica atrás, recuada para a esquerda.
 # DESLOC_TRAS = 0 alinha tudo em uma grade reta.
-LINHAS_Y = (200, 380)   # y do sprite de cada linha
+LINHAS_Y = (200, 400)   # y do sprite de cada linha (cabem nome + vida + mana)
 X_FRENTE = 190          # x do 1º personagem da linha da frente
 ESPACO_X = 130          # distância horizontal entre os dois da linha
 DESLOC_TRAS = 80        # quanto a linha de trás recua para a esquerda
@@ -71,12 +112,13 @@ def nove_fatias(img, largura, altura, borda):
 fundo = pygame.transform.scale(carregar('batalha.png').convert(), (LARGURA, ALTURA))
 img_mensagens = carregar('mensagens.png').convert_alpha()
 
-# contorno.png tem 4 px de borda; esticado para a largura do sprite
-BORDA_VIDA = 4
+# contorno.png tem 4 px de borda; esticado para a largura do sprite.
+# A mesma moldura é usada nas barras de vida e de mana.
+BORDA_BARRA = 4
 ALTURA_BARRA = 22
-moldura_vida = nove_fatias(
+moldura_barra = nove_fatias(
     carregar('contorno.png').convert_alpha(),
-    TAM_PERSONAGEM, ALTURA_BARRA, BORDA_VIDA
+    TAM_PERSONAGEM, ALTURA_BARRA, BORDA_BARRA
 )
 fonte_nome = pygame.font.Font(None, 24)
 fonte_hp = pygame.font.Font(None, 18)
@@ -96,12 +138,191 @@ def carregar_sprite(arquivo, tamanho):
     return pygame.transform.scale(img, (tamanho, tamanho))
 
 
+_cache_inimigos = {}
+
+
+def achar_arquivo_inimigo(chave):
+    nome = ARQUIVOS_INIMIGOS.get(chave, f'{chave}.png')
+    for pasta in (SPRITES / 'inimigos', SPRITES):
+        if (pasta / nome).exists():
+            return pasta / nome
+    return None
+
+
+def imagem_inimigo(chave):
+    """(imagem, imagem escurecida) do inimigo, já no tamanho de tela."""
+    if chave not in _cache_inimigos:
+        caminho = achar_arquivo_inimigo(chave)
+
+        if caminho:
+            img = pygame.image.load(str(caminho)).convert_alpha()
+            w, h = img.get_size()
+            if ESCALA_INIMIGOS:
+                fator = ESCALA_INIMIGOS
+            else:
+                fator = ALTURA_INIMIGO.get(chave, ALTURA_PADRAO_INIMIGO) / h
+            img = pygame.transform.scale(
+                img, (max(1, round(w * fator)), max(1, round(h * fator)))
+            )
+        else:
+            print(f'[aviso] sprite do inimigo "{chave}" não encontrado; usando placeholder')
+            img = carregar_sprite('placeholder.png', TAM_INIMIGO)
+
+        _cache_inimigos[chave] = (img, escurecer(img))
+
+    return _cache_inimigos[chave]
+
+
+botao_vazio = pygame.transform.scale(
+    carregar('botao_habilidade.png').convert_alpha(), TAM_BOTAO_HAB
+)
+botao_vazio_apagado = escurecer(botao_vazio)
+
+
+def carregar_quadro():
+    caminho = SPRITES / 'quadro_habilidades.png'
+    if caminho.exists():
+        img = pygame.image.load(str(caminho)).convert_alpha()
+        w, h = img.get_size()
+        return pygame.transform.scale(
+            img, (round(w * ALTURA_QUADRO / h), ALTURA_QUADRO)
+        )
+
+    print('[aviso] quadro_habilidades.png não encontrado; usando um quadro simples')
+    img = pygame.Surface((247, ALTURA_QUADRO), pygame.SRCALPHA)
+    img.fill((18, 30, 54, 255))
+    pygame.draw.rect(img, (120, 140, 180), img.get_rect(), 6)
+    return img
+
+
+quadro_habilidades = carregar_quadro()
+RECT_QUADRO = quadro_habilidades.get_rect(
+    midbottom=(CAIXA_MENU.centerx, CAIXA_MENU.top - 2)
+)
+
+# ---------- texto dos botões ----------
+# Se existir assets/fonts/pixel.ttf (uma fonte pixel-art), ela é usada; senão,
+# a fonte padrão do pygame (suavizada, bem mais fácil de ler em tamanho pequeno).
+_ttf_pixel = SPRITES.parent / 'fonts' / 'pixel.ttf'
+_arquivo_fonte = str(_ttf_pixel) if _ttf_pixel.exists() else None
+SUAVIZAR_TEXTO = _arquivo_fonte is None   # fonte pixel-art fica melhor SEM suavização
+_TAMANHOS_FONTE = (28, 26, 24, 22, 20, 18, 16, 15, 14) if _arquivo_fonte is None \
+    else (24, 20, 16, 14, 12, 10, 8)
+FONTES_BOTAO = {tam: pygame.font.Font(_arquivo_fonte, tam) for tam in _TAMANHOS_FONTE}
+_cache_texto = {}
+
+
+def _quebrar_em_duas(conteudo, fonte):
+    """Divide o texto em 2 linhas o mais equilibradas possível (ou None)."""
+    palavras = conteudo.split()
+    melhor = None
+    for k in range(1, len(palavras)):
+        linhas = [' '.join(palavras[:k]), ' '.join(palavras[k:])]
+        pior = max(fonte.size(l)[0] for l in linhas)
+        if melhor is None or pior < melhor[0]:
+            melhor = (pior, linhas)
+    return melhor[1] if melhor else None
+
+
+def texto_botao(conteudo, cor, largura_max, altura_max=34, contorno=(35, 12, 0)):
+    """Texto legível para botões: usa o MAIOR tamanho que couber, em 1 linha
+    ou, se for longo, quebrado em 2 linhas. Tem contorno escuro."""
+    chave = (conteudo, cor, largura_max, altura_max)
+    if chave in _cache_texto:
+        return _cache_texto[chave]
+
+    escolhido = None
+    for fonte in FONTES_BOTAO.values():  # do maior para o menor
+        passo = fonte.get_linesize()
+        for linhas in ([conteudo], _quebrar_em_duas(conteudo, fonte)):
+            if not linhas:
+                continue
+            largura = max(fonte.size(l)[0] for l in linhas) + 2
+            altura = passo * len(linhas) + 2
+            if largura <= largura_max and altura <= altura_max:
+                escolhido = (fonte, linhas)
+                break
+        if escolhido:
+            break
+
+    if escolhido is None:  # nem o menor coube: usa o menor e encolhe a largura
+        fonte = list(FONTES_BOTAO.values())[-1]
+        escolhido = (fonte, [conteudo])
+
+    fonte, linhas = escolhido
+    passo = fonte.get_linesize()
+    largura = max(fonte.size(l)[0] for l in linhas) + 2
+    img = pygame.Surface((largura, passo * len(linhas) + 2), pygame.SRCALPHA)
+
+    for n, linha in enumerate(linhas):
+        base = fonte.render(linha, SUAVIZAR_TEXTO, cor)
+        borda = fonte.render(linha, SUAVIZAR_TEXTO, contorno)
+        x = (largura - base.get_width()) // 2   # linhas centralizadas
+        y = n * passo
+        for dx in (0, 1, 2):
+            for dy in (0, 1, 2):
+                if (dx, dy) != (1, 1):
+                    img.blit(borda, (x + dx, y + dy))
+        img.blit(base, (x + 1, y + 1))
+
+    if img.get_width() > largura_max:
+        img = pygame.transform.smoothscale(img, (largura_max, img.get_height()))
+
+    _cache_texto[chave] = img
+    return img
+
+
+# Se existir assets/sprites/habilidades/<chave_da_habilidade>.png (por exemplo
+# picada_mortal.png), essa imagem é usada no lugar do botão gerado pelo código.
+_cache_botoes = {}
+
+
+def imagem_botao_habilidade(chave, tem_mana):
+    item = (chave, tem_mana)
+    if item not in _cache_botoes:
+        img = None
+        caminho = SPRITES / 'habilidades' / f'{chave}.png'
+        if caminho.exists():
+            img = pygame.transform.scale(
+                pygame.image.load(str(caminho)).convert_alpha(), TAM_BOTAO_HAB
+            )
+            if not tem_mana:
+                img = escurecer(img)
+        _cache_botoes[item] = img
+    return _cache_botoes[item]
+
+
 def texto(tela, conteudo, pos, fonte, cor=(255, 255, 255), centro=False):
     sombra = fonte.render(conteudo, True, (0, 0, 0))
     img = fonte.render(conteudo, True, cor)
     rect = img.get_rect(center=pos) if centro else img.get_rect(topleft=pos)
     tela.blit(sombra, rect.move(2, 2))
     tela.blit(img, rect)
+
+
+def _desenhar_barra(tela, x, y, largura, valor, maximo, cor, cor_fundo, moldura):
+    proporcao = max(0, valor) / maximo if maximo else 0
+
+    if moldura:
+        # Preenchimento dentro da moldura (contorno.png) e moldura por cima
+        ix, iy = x + BORDA_BARRA, y + BORDA_BARRA
+        iw = largura - 2 * BORDA_BARRA
+        ih = moldura.get_height() - 2 * BORDA_BARRA
+        pygame.draw.rect(tela, cor_fundo, (ix, iy, iw, ih))
+        pygame.draw.rect(tela, cor, (ix, iy, int(iw * proporcao), ih))
+        tela.blit(moldura, (x, y))
+        centro = (x + largura // 2, y + moldura.get_height() // 2)
+    else:
+        pygame.draw.rect(tela, cor_fundo, (x, y, largura, 14))
+        pygame.draw.rect(tela, cor, (x, y, int(largura * proporcao), 14))
+        pygame.draw.rect(tela, (0, 0, 0), (x, y, largura, 14), 2)
+        centro = (x + largura // 2, y + 7)
+
+    numeros = f'{valor}/{maximo}'
+    info = fonte_hp.render(numeros, True, (255, 255, 255))
+    sombra = fonte_hp.render(numeros, True, (0, 0, 0))
+    tela.blit(sombra, sombra.get_rect(center=(centro[0] + 1, centro[1] + 1)))
+    tela.blit(info, info.get_rect(center=centro))
 
 
 def barra_vida(tela, x, y, largura, combatente, moldura=None):
@@ -113,40 +334,26 @@ def barra_vida(tela, x, y, largura, combatente, moldura=None):
     else:
         cor = (220, 50, 40)
 
-    if moldura:
-        # Preenchimento dentro da moldura (contorno.png) e moldura por cima
-        ix, iy = x + BORDA_VIDA, y + BORDA_VIDA
-        iw = largura - 2 * BORDA_VIDA
-        ih = moldura.get_height() - 2 * BORDA_VIDA
-        pygame.draw.rect(tela, (60, 15, 15), (ix, iy, iw, ih))
-        pygame.draw.rect(tela, cor, (ix, iy, int(iw * proporcao), ih))
-        tela.blit(moldura, (x, y))
-        centro = (x + largura // 2, y + moldura.get_height() // 2)
-    else:
-        pygame.draw.rect(tela, (60, 15, 15), (x, y, largura, 14))
-        pygame.draw.rect(tela, cor, (x, y, int(largura * proporcao), 14))
-        pygame.draw.rect(tela, (0, 0, 0), (x, y, largura, 14), 2)
-        centro = (x + largura // 2, y + 7)
+    _desenhar_barra(tela, x, y, largura, combatente.vida,
+                    combatente.vida_maxima, cor, (60, 15, 15), moldura)
 
-    info = fonte_hp.render(f'{combatente.vida}/{combatente.vida_maxima}', True, (255, 255, 255))
-    sombra = fonte_hp.render(f'{combatente.vida}/{combatente.vida_maxima}', True, (0, 0, 0))
-    tela.blit(sombra, sombra.get_rect(center=(centro[0] + 1, centro[1] + 1)))
-    tela.blit(info, info.get_rect(center=centro))
+
+def barra_mana(tela, x, y, largura, personagem, moldura=None):
+    _desenhar_barra(tela, x, y, largura, personagem.mana,
+                    personagem.mana_maxima, (60, 130, 240), (12, 20, 60), moldura)
 
 
 class Batalha:
     def __init__(self, grupo_jogador):
         self.grupo = grupo_jogador
         self.fase = 0
-        self.modo = 'acao'  # 'acao' (menu) ou 'alvo' (escolhendo inimigo)
+        self.modo = 'acao'  # 'acao' (menu), 'habilidades' ou 'alvo' (escolhendo inimigo)
+        self.habilidade_escolhida = None
 
         self.sprites = {}
         for p in self.grupo:
             img = carregar_sprite(SPRITES_PERSONAGENS[p.nome], TAM_PERSONAGEM)
             self.sprites[id(p)] = (img, escurecer(img))
-
-        self.sprite_inimigo = carregar_sprite('placeholder.png', TAM_INIMIGO)
-        self.sprite_inimigo_morto = escurecer(self.sprite_inimigo)
 
         self.iniciar_fase()
 
@@ -159,6 +366,7 @@ class Batalha:
         self.inimigos = [criar_inimigo(chave) for chave in FASES[self.fase]]
         self.luta = Luta(self.grupo, list(self.inimigos))
         self.modo = 'acao'
+        self.habilidade_escolhida = None
         registrar(f'Fase {self.fase + 1}/{len(FASES)}: inimigos à frente!')
 
     # ---------- posições ----------
@@ -168,11 +376,42 @@ class Batalha:
         return pygame.Rect(x, LINHAS_Y[linha], TAM_PERSONAGEM, TAM_PERSONAGEM)
 
     def rect_inimigo(self, i):
-        coluna = i % 2
-        linha = i // 2
-        return pygame.Rect(
-            1060 - coluna * 190, 170 + linha * 210, TAM_INIMIGO, TAM_INIMIGO
+        """Retângulo do sprite do inimigo i (pés no chão, centrado na coluna)."""
+        img = imagem_inimigo(self.inimigos[i].chave)[0]
+        total = len(self.inimigos)
+
+        if total in CENTROS_INIMIGOS:
+            centro, fileira = CENTROS_INIMIGOS[total][i], 0
+        else:  # mais inimigos: duas colunas, em várias fileiras
+            centro, fileira = CENTROS_INIMIGOS[2][i % 2], i // 2
+
+        return img.get_rect(midbottom=(centro, CHAO_INIMIGOS - fileira * 150))
+
+    def botoes_quadro(self, atual):
+        """Botões dentro do quadro: [(rect, 'habilidade' | 'voltar', dados)]."""
+        habilidades = atual.lista_habilidades()
+        fx0, fy0, fx1, fy1 = INTERIOR_QUADRO
+        q = RECT_QUADRO
+        interior = pygame.Rect(
+            q.x + round(q.width * fx0), q.y + round(q.height * fy0),
+            round(q.width * (fx1 - fx0)), round(q.height * (fy1 - fy0)),
         )
+        larg, alt = TAM_BOTAO_HAB
+        x = interior.centerx - larg // 2
+
+        # habilidades de cima para baixo; VOLTAR fixo no fim do quadro
+        n = len(habilidades) + 1
+        espaco = min(14, max(6, (interior.height - n * alt) // (n + 1)))
+        botoes = [
+            (pygame.Rect(x, interior.y + espaco + i * (alt + espaco), larg, alt),
+             'habilidade', h)
+            for i, h in enumerate(habilidades)
+        ]
+        botoes.append((
+            pygame.Rect(x, interior.bottom - espaco - alt, larg, alt),
+            'voltar', None
+        ))
+        return botoes
 
     def inimigo_na_posicao(self, pos):
         for i, inimigo in enumerate(self.inimigos):
@@ -190,18 +429,40 @@ class Batalha:
         )
 
     # ---------- eventos ----------
+    def voltar(self):
+        """Botão direito / ESC: volta um passo no menu."""
+        if self.modo == 'alvo' and self.habilidade_escolhida:
+            self.modo = 'habilidades'
+        else:
+            self.modo = 'acao'
+        self.habilidade_escolhida = None
+
+    def escolher_habilidade(self, atual, habilidade):
+        chave, nome, custo, tipo_alvo = habilidade
+
+        if not atual.tem_mana(chave):
+            registrar(f'{atual.nome} está sem mana para {nome} (custo {custo})!')
+            return
+
+        if tipo_alvo == 'inimigo':
+            self.habilidade_escolhida = chave
+            self.modo = 'alvo'
+        else:  # 'todos' ou 'nenhum': não precisa escolher alvo
+            self.luta.executar_acao_jogador(chave)
+            self.modo = 'acao'
+
     def evento(self, ev):
         """Retorna 'menu' quando a batalha termina e deve voltar ao menu."""
         if ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
-            self.modo = 'acao'
+            self.voltar()
             return None
 
         if ev.type != pygame.MOUSEBUTTONDOWN:
             return None
 
-        # Botão direito cancela a escolha de alvo
+        # Botão direito volta um passo
         if ev.button == 3:
-            self.modo = 'acao'
+            self.voltar()
             return None
 
         if ev.button != 1:
@@ -218,32 +479,57 @@ class Batalha:
         if not self.vez_do_jogador():
             return None
 
-        if self.modo == 'acao':
+        atual = self.luta.combatente_atual()
+
+        if self.modo in ('acao', 'habilidades'):
+            # Com o quadro aberto, os botões dele vêm primeiro
+            if self.modo == 'habilidades':
+                for rect, tipo, dados in self.botoes_quadro(atual):
+                    if rect.collidepoint(ev.pos):
+                        if tipo == 'voltar':
+                            self.voltar()
+                        else:
+                            self.escolher_habilidade(atual, dados)
+                        return None
+
+            # Os 4 botões de ação continuam valendo com o quadro aberto
             for nome, rect in BOTOES_ACAO.items():
                 if rect.collidepoint(ev.pos):
-                    if nome == 'atacar':
-                        self.modo = 'alvo'
-                    elif nome == 'defender':
-                        self.luta.executar_acao_jogador('defender')
-                    else:
-                        registrar('Ainda não disponível!')
+                    self.clicar_acao(nome)
                     break
 
         elif self.modo == 'alvo':
             alvo = self.inimigo_na_posicao(ev.pos)
             if alvo:
-                self.luta.executar_acao_jogador('atacar', alvo)
+                acao = self.habilidade_escolhida or 'atacar'
+                self.luta.executar_acao_jogador(acao, alvo)
                 self.modo = 'acao'
+                self.habilidade_escolhida = None
             elif not CAIXA_MENU.collidepoint(ev.pos):
-                self.modo = 'acao'
+                self.voltar()
 
         return None
+
+    def clicar_acao(self, nome):
+        self.habilidade_escolhida = None
+
+        if nome == 'atacar':
+            self.modo = 'alvo'
+        elif nome == 'defender':
+            self.luta.executar_acao_jogador('defender')
+            self.modo = 'acao'
+        elif nome == 'habilidades':
+            # clicar de novo em Habilidades fecha o quadro
+            self.modo = 'acao' if self.modo == 'habilidades' else 'habilidades'
+        else:
+            registrar('Ainda não disponível!')
 
     # ---------- atualização ----------
     def atualizar(self):
         self.luta.atualizar()
         if not self.vez_do_jogador():
             self.modo = 'acao'
+            self.habilidade_escolhida = None
 
     # ---------- desenho ----------
     def desenhar(self, tela, mouse):
@@ -269,10 +555,13 @@ class Batalha:
             if p.defendendo and p.vida > 0:
                 pygame.draw.rect(tela, (80, 160, 255), rect.inflate(6, 6), 3)
 
-            # Nome logo abaixo do sprite e a barra de vida abaixo do nome
+            # Nome logo abaixo do sprite, depois a barra de vida e a de mana
             texto(tela, p.nome, (rect.centerx, rect.bottom + 14),
                   fonte_nome, centro=True)
-            barra_vida(tela, rect.x, rect.bottom + 28, rect.width, p, moldura_vida)
+            y_vida = rect.bottom + 28
+            barra_vida(tela, rect.x, y_vida, rect.width, p, moldura_barra)
+            barra_mana(tela, rect.x, y_vida + ALTURA_BARRA + 2, rect.width,
+                       p, moldura_barra)
 
             # Seta amarela sobre quem está na vez
             if p is atual and p.vida > 0:
@@ -291,10 +580,14 @@ class Batalha:
 
             rect = self.rect_inimigo(i)
             vivo = inimigo.vida > 0
+            normal, morto = imagem_inimigo(inimigo.chave)
+
+            # Nome sobre a cabeça, sprite, barra de vida embaixo dos pés
             texto(tela, inimigo.nome + (' (DEF)' if inimigo.defendendo else ''),
                   (rect.centerx, rect.y - 14), fonte_nome, centro=True)
-            tela.blit(self.sprite_inimigo if vivo else self.sprite_inimigo_morto, rect)
-            barra_vida(tela, rect.x, rect.bottom + 4, rect.width, inimigo)
+            tela.blit(normal if vivo else morto, rect)
+            barra_vida(tela, rect.centerx - TAM_INIMIGO // 2, rect.bottom + 4,
+                       TAM_INIMIGO, inimigo)
 
             if self.modo == 'alvo' and vivo:
                 cor = (255, 70, 60) if inimigo is sobre else (255, 255, 255)
@@ -313,7 +606,12 @@ class Batalha:
             return None
         if self.vez_do_jogador():
             if self.modo == 'alvo':
+                if self.habilidade_escolhida:
+                    nome = atual.HABILIDADES[self.habilidade_escolhida]['nome']
+                    return f'{nome}: escolha o alvo (botão direito volta)', (255, 255, 255)
                 return 'Escolha o alvo (botão direito cancela)', (255, 255, 255)
+            if self.modo == 'habilidades':
+                return 'Escolha uma habilidade (botão direito volta)', (255, 255, 255)
             return f'Vez de {atual.nome}: escolha uma ação', (255, 220, 40)
         return f'Turno de {atual.nome}...', (170, 190, 220)
 
@@ -340,15 +638,48 @@ class Batalha:
 
     def desenhar_menu(self, tela, mouse, atual):
         if self.vez_do_jogador():
-            if self.modo == 'acao':
-                for rect in BOTOES_ACAO.values():
+            if self.modo in ('acao', 'habilidades'):
+                for nome, rect in BOTOES_ACAO.items():
                     if rect.collidepoint(mouse):
                         pygame.draw.rect(tela, (255, 255, 255), rect, 3)
+
+            if self.modo == 'habilidades':
+                # botão Habilidades "marcado" enquanto o quadro está aberto
+                pygame.draw.rect(tela, (255, 220, 40), BOTOES_ACAO['habilidades'], 3)
+                self.desenhar_quadro(tela, mouse, atual)
         else:
             # Menu apagado durante o turno dos inimigos
             sombra = pygame.Surface(CAIXA_MENU.size, pygame.SRCALPHA)
             sombra.fill((0, 0, 0, 150))
             tela.blit(sombra, CAIXA_MENU)
+
+    def desenhar_quadro(self, tela, mouse, atual):
+        tela.blit(quadro_habilidades, RECT_QUADRO)
+
+        for rect, tipo, dados in self.botoes_quadro(atual):
+            if tipo == 'voltar':
+                tela.blit(botao_vazio, rect)
+                img = texto_botao('VOLTAR', (255, 200, 50), rect.width - 24, 30)
+                tela.blit(img, img.get_rect(center=(rect.centerx, rect.centery - 3)))
+            else:
+                chave, nome, custo, _ = dados
+                tem_mana = atual.tem_mana(chave)
+                personalizada = imagem_botao_habilidade(chave, tem_mana)
+
+                if personalizada:
+                    tela.blit(personalizada, rect)
+                else:
+                    tela.blit(botao_vazio if tem_mana else botao_vazio_apagado, rect)
+                    cor_nome = (255, 200, 50) if tem_mana else (150, 150, 150)
+                    cor_custo = (120, 205, 255) if tem_mana else (230, 90, 80)
+                    # nome à esquerda, custo de mana à direita
+                    img = texto_botao(nome, cor_nome, 118, 34)
+                    tela.blit(img, img.get_rect(center=(rect.x + 70, rect.centery - 3)))
+                    img = texto_botao(str(custo), cor_custo, 32, 26)
+                    tela.blit(img, img.get_rect(center=(rect.x + 152, rect.centery - 3)))
+
+            if rect.collidepoint(mouse):
+                pygame.draw.rect(tela, (255, 255, 255), rect, 3)
 
     def desenhar_fim(self, tela):
         escuro = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
