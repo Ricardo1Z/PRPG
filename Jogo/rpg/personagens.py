@@ -91,24 +91,22 @@ class Personagem(Combatente):
 # =====================================================================
 class Guerreiro(Personagem):
     HABILIDADES = {
-        'golpe_pesado': {'nome': 'Golpe Pesado', 'custo': 10, 'alvo': 'inimigo'},
-        'salto_de_bits': {'nome': 'Salto de Bits', 'custo': 20, 'alvo': 'inimigo'},
+        'golpe_pesado': {'nome': 'Golpe Pesado', 'custo': 5, 'alvo': 'inimigo'},
+        'salto_de_bits': {'nome': 'Salto de Bits', 'custo': 15, 'alvo': 'inimigo'},
     }
 
     def __init__(self):
-        super().__init__('Python', 100, 100, 15, 8, 3, mana_maxima=40)
+        super().__init__('Python', 100, 100, 15, 10, 3, mana_maxima=45)
 
     def golpe_pesado(self, alvo):
-        # Dano fixo: ignora completamente a defesa
-        dano = 20
+        dano = max(1, 20 - alvo.defesa // 2)
         self._causar_dano(
             alvo, dano,
             f'{self.nome} usou Golpe Pesado: {dano} de dano em {alvo.nome}!'
         )
 
     def salto_de_bits(self, alvo):
-        # Ignora 50% da defesa do inimigo
-        dano = max(1, 35 - alvo.defesa // 2)
+        dano = max(1, 35 - int(alvo.defesa // 3))
         self._causar_dano(
             alvo, dano,
             f'{self.nome} usou Salto de Bits: {dano} de dano em {alvo.nome}!'
@@ -120,12 +118,12 @@ class Guerreiro(Personagem):
 # =====================================================================
 class Mago(Personagem):
     HABILIDADES = {
-        'cadeia_de_codigos': {'nome': 'Cadeia de Códigos', 'custo': 15, 'alvo': 'todos'},
-        'meteoro_de_variavel': {'nome': 'Meteoro de Variável', 'custo': 30, 'alvo': 'inimigo'},
+        'cadeia_de_codigos': {'nome': 'Cadeia de Códigos', 'custo': 10, 'alvo': 'todos'},
+        'meteoro_de_variavel': {'nome': 'Meteoro de Variável', 'custo': 20, 'alvo': 'inimigo'},
     }
 
     def __init__(self):
-        super().__init__('Java', 80, 80, 25, 7, 2, mana_maxima=60)
+        super().__init__('Java', 80, 80, 20, 8, 2, mana_maxima=80)
 
     def cadeia_de_codigos(self, alvos):
         registrar(f'{self.nome} lançou Cadeia de Códigos!')
@@ -150,30 +148,26 @@ class Mago(Personagem):
 class Ladino(Personagem):
     HABILIDADES = {
         'investida_assincrona': {'nome': 'Investida Assíncrona', 'custo': 10, 'alvo': 'inimigo'},
-        'rajada_de_scripts': {'nome': 'Rajada de Scripts', 'custo': 20, 'alvo': 'inimigo'},
+        'rajada_de_scripts': {'nome': 'Rajada de Scripts', 'custo': 20, 'alvo': 'todos'},
     }
 
     def __init__(self):
-        super().__init__('JavaScript', 90, 90, 20, 6, 5, mana_maxima=40)
+        super().__init__('JavaScript', 90, 90, 20, 8, 5, mana_maxima=50)
 
     def investida_assincrona(self, alvo):
-        # Ignora 25% da defesa do inimigo
-        dano = max(1, 30 - int(alvo.defesa * 0.75))
+        dano = 30
         self._causar_dano(
             alvo, dano,
             f'{self.nome} usou Investida Assíncrona: {dano} de dano em {alvo.nome}!'
         )
 
-    def rajada_de_scripts(self, alvo):
-        registrar(f'{self.nome} usou Rajada de Scripts!')
+    def rajada_de_scripts(self, alvos):
+        registrar(f'{self.nome} lançou Rajada de Scripts!')
 
-        for golpe in range(1, 4):
-            if alvo.vida <= 0:
-                break
-
-            dano = max(1, 15 - alvo.defesa)
+        for inimigo in alvos:
+            dano = max(1, 20 - inimigo.defesa)
             self._causar_dano(
-                alvo, dano, f'Golpe {golpe}: {dano} de dano em {alvo.nome}!'
+                inimigo, dano, f'{inimigo.nome} recebeu {dano} de dano!'
             )
 
 
@@ -182,12 +176,12 @@ class Ladino(Personagem):
 # =====================================================================
 class Paladino(Personagem):
     HABILIDADES = {
-        'escudo_de_compilacao': {'nome': 'Escudo de Compilação', 'custo': 10, 'alvo': 'nenhum'},
-        'codigo_divino': {'nome': 'Código Divino', 'custo': 30, 'alvo': 'inimigo'},
+        'escudo_de_compilacao': {'nome': 'Escudo de Compilação', 'custo': 5, 'alvo': 'nenhum'},
+        'codigo_divino': {'nome': 'Código Divino', 'custo': 15, 'alvo': 'inimigo'},
     }
 
     def __init__(self):
-        super().__init__('C#', 150, 150, 10, 10, 1, mana_maxima=50)
+        super().__init__('C#', 150, 150, 15, 15, 1, mana_maxima=60)
         self.escudo_compilacao_ativo = False
 
     def escudo_de_compilacao(self):

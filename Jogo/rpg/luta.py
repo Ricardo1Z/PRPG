@@ -1,16 +1,13 @@
 import random
 
 from .registro import registrar
+from . import itens
 
 
 class Luta:
     def __init__(self, grupo_jogador, grupo_inimigos):
         self.grupo_jogador = grupo_jogador
         self.grupo_inimigos = grupo_inimigos
-
-        # Restaura a mana no início de cada luta
-        for personagem in self.grupo_jogador:
-            personagem.restaurar_mana()
 
         self.participantes = grupo_jogador + grupo_inimigos
 
@@ -102,6 +99,23 @@ class Luta:
             return
 
         # Só chega aqui se a ação deu certo
+        self.avancar_turno()
+
+    def usar_pocao(self, chave, alvo, inventario):
+        """O personagem da vez usa uma poção em `alvo` (um aliado) e gasta o
+        turno. Se não deu certo (sem estoque, vida/mana já cheia...), o turno
+        NÃO passa."""
+        combatente = self.combatente_atual()
+
+        if combatente not in self.grupo_jogador or combatente.vida <= 0:
+            return
+
+        if alvo not in self.grupo_jogador:
+            return
+
+        if not itens.usar_pocao(chave, combatente, alvo, inventario):
+            return
+
         self.avancar_turno()
 
     def atualizar(self):

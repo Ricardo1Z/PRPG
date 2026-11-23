@@ -3,6 +3,7 @@ import pygame
 from .telas import LARGURA, ALTURA, SPRITES, carregar
 from .luta import Luta
 from .inimigos import criar_inimigo
+from . import itens
 from .registro import mensagens, limpar, registrar
 
 # Cada item é uma luta; ao vencer, passa para a próxima.
@@ -41,6 +42,7 @@ ALTURA_QUADRO = 370
 # parte de dentro da moldura, em fração do quadro: (esquerda, cima, direita, baixo)
 INTERIOR_QUADRO = (0.12, 0.09, 0.88, 0.92)
 TAM_BOTAO_HAB = (172, 54)      # tamanho dos botões dentro do quadro
+ALTURA_BOTAO_ITEM = 38         # botões das poções são mais baixos (cabem 6 + VOLTAR)
 
 TAM_PERSONAGEM = 96
 TAM_INIMIGO = 120  # só para o placeholder (usado se o sprite do inimigo não existir)
@@ -177,6 +179,24 @@ botao_vazio = pygame.transform.scale(
     carregar('botao_habilidade.png').convert_alpha(), TAM_BOTAO_HAB
 )
 botao_vazio_apagado = escurecer(botao_vazio)
+
+
+def recortar_linhas(img, trechos):
+    """Monta uma imagem mais baixa juntando só alguns trechos de linhas."""
+    largura = img.get_width()
+    altura = sum(fim - ini for ini, fim in trechos)
+    novo = pygame.Surface((largura, altura), pygame.SRCALPHA)
+    y = 0
+    for ini, fim in trechos:
+        novo.blit(img, (0, y), (0, ini, largura, fim - ini))
+        y += fim - ini
+    return novo
+
+
+# 54 -> 38 px: tira 8 linhas da faixa azul-esverdeada e 8 da azul-escura
+# (faixas de cor constante), então o botão não fica distorcido.
+botao_item = recortar_linhas(botao_vazio, [(0, 15), (23, 30), (38, 54)])
+botao_item_apagado = escurecer(botao_item)
 
 
 def carregar_quadro():
@@ -347,8 +367,14 @@ class Batalha:
     def __init__(self, grupo_jogador):
         self.grupo = grupo_jogador
         self.fase = 0
-        self.modo = 'acao'  # 'acao' (menu), 'habilidades' ou 'alvo' (escolhendo inimigo)
+        # 'acao' (menu), 'habilidades', 'itens', 'alvo' (escolhendo inimigo)
+        # ou 'alvo_aliado' (escolhendo quem recebe a poção)
+        self.modo = 'acao'
         self.habilidade_escolhida = None
+        self.item_escolhido = None
+        self.inventario = itens.inventario_inicial()  # poções do grupo (passa de fase)
+        self.drops = {}
+        self.drops_sorteados = False
 
         self.sprites = {}
         for p in self.grupo:
@@ -367,6 +393,9 @@ class Batalha:
         self.luta = Luta(self.grupo, list(self.inimigos))
         self.modo = 'acao'
         self.habilidade_escolhida = None
+        self.item_escolhido = None
+        self.drops = {}
+        self.drops_sorteados = False
         registrar(f'Fase {self.fase + 1}/{len(FASES)}: inimigos à frente!')
 
     # ---------- posições ----------
@@ -374,6 +403,11 @@ class Batalha:
         linha, coluna = divmod(i, 2)
         x = X_FRENTE - linha * DESLOC_TRAS + coluna * ESPACO_X
         return pygame.Rect(x, LINHAS_Y[linha], TAM_PERSONAGEM, TAM_PERSONAGEM)
+
+    def rect_clique_personagem(self, i):
+        """Sprite + nome + barras (área onde se clica para escolher o aliado)."""
+        r = self.rect_personagem(i)
+        return pygame.Rect(r.x, r.y, r.width, r.height + 2 * ALTURA_BARRA + 30)
 
     def rect_inimigo(self, i):
         """Retângulo do sprite do inimigo i (pés no chão, centrado na coluna)."""
@@ -388,24 +422,31 @@ class Batalha:
         return img.get_rect(midbottom=(centro, CHAO_INIMIGOS - fileira * 150))
 
     def botoes_quadro(self, atual):
-        """Botões dentro do quadro: [(rect, 'habilidade' | 'voltar', dados)]."""
-        habilidades = atual.lista_habilidades()
+        """Botões dentro do quadro (habilidades ou poções, conforme o modo):
+        [(rect, 'habilidade' | 'item' | 'voltar', dados)]."""
+        if self.modo == 'itens':
+            entradas = [('item', chave) for chave in itens.POCOES]
+            alt = ALTURA_BOTAO_ITEM
+        else:
+            entradas = [('habilidade', h) for h in atual.lista_habilidades()]
+            alt = TAM_BOTAO_HAB[1]
+
         fx0, fy0, fx1, fy1 = INTERIOR_QUADRO
         q = RECT_QUADRO
         interior = pygame.Rect(
             q.x + round(q.width * fx0), q.y + round(q.height * fy0),
             round(q.width * (fx1 - fx0)), round(q.height * (fy1 - fy0)),
         )
-        larg, alt = TAM_BOTAO_HAB
+        larg = TAM_BOTAO_HAB[0]
         x = interior.centerx - larg // 2
 
-        # habilidades de cima para baixo; VOLTAR fixo no fim do quadro
-        n = len(habilidades) + 1
-        espaco = min(14, max(6, (interior.height - n * alt) // (n + 1)))
+        # itens de cima para baixo; VOLTAR fixo no fim do quadro
+        n = len(entradas) + 1
+        espaco = min(14, max(4, (interior.height - n * alt) // (n + 1)))
         botoes = [
             (pygame.Rect(x, interior.y + espaco + i * (alt + espaco), larg, alt),
-             'habilidade', h)
-            for i, h in enumerate(habilidades)
+             tipo, dados)
+            for i, (tipo, dados) in enumerate(entradas)
         ]
         botoes.append((
             pygame.Rect(x, interior.bottom - espaco - alt, larg, alt),
@@ -433,9 +474,12 @@ class Batalha:
         """Botão direito / ESC: volta um passo no menu."""
         if self.modo == 'alvo' and self.habilidade_escolhida:
             self.modo = 'habilidades'
+        elif self.modo == 'alvo_aliado':
+            self.modo = 'itens'
         else:
             self.modo = 'acao'
         self.habilidade_escolhida = None
+        self.item_escolhido = None
 
     def escolher_habilidade(self, atual, habilidade):
         chave, nome, custo, tipo_alvo = habilidade
@@ -450,6 +494,20 @@ class Batalha:
         else:  # 'todos' ou 'nenhum': não precisa escolher alvo
             self.luta.executar_acao_jogador(chave)
             self.modo = 'acao'
+
+    def escolher_item(self, chave):
+        nome = itens.nome_pocao(chave)
+
+        if self.inventario.get(chave, 0) <= 0:
+            registrar(f'Você não tem mais {nome}!')
+            return
+
+        if not any(itens.pode_usar(chave, p)[0] for p in self.grupo):
+            registrar(f'Ninguém precisa de {nome} agora!')
+            return
+
+        self.item_escolhido = chave
+        self.modo = 'alvo_aliado'
 
     def evento(self, ev):
         """Retorna 'menu' quando a batalha termina e deve voltar ao menu."""
@@ -481,13 +539,15 @@ class Batalha:
 
         atual = self.luta.combatente_atual()
 
-        if self.modo in ('acao', 'habilidades'):
-            # Com o quadro aberto, os botões dele vêm primeiro
-            if self.modo == 'habilidades':
+        if self.modo in ('acao', 'habilidades', 'itens'):
+            # Com um quadro aberto, os botões dele vêm primeiro
+            if self.modo in ('habilidades', 'itens'):
                 for rect, tipo, dados in self.botoes_quadro(atual):
                     if rect.collidepoint(ev.pos):
                         if tipo == 'voltar':
                             self.voltar()
+                        elif tipo == 'item':
+                            self.escolher_item(dados)
                         else:
                             self.escolher_habilidade(atual, dados)
                         return None
@@ -508,10 +568,25 @@ class Batalha:
             elif not CAIXA_MENU.collidepoint(ev.pos):
                 self.voltar()
 
+        elif self.modo == 'alvo_aliado':
+            for i, aliado in enumerate(self.grupo):
+                if aliado.vida > 0 and self.rect_clique_personagem(i).collidepoint(ev.pos):
+                    chave = self.item_escolhido
+                    antes = self.inventario[chave]
+                    self.luta.usar_pocao(chave, aliado, self.inventario)
+                    if self.inventario[chave] < antes:  # foi usada: o turno passou
+                        self.modo = 'acao'
+                        self.item_escolhido = None
+                    return None  # se não deu certo, continua escolhendo
+
+            if not CAIXA_MENU.collidepoint(ev.pos):
+                self.voltar()
+
         return None
 
     def clicar_acao(self, nome):
         self.habilidade_escolhida = None
+        self.item_escolhido = None
 
         if nome == 'atacar':
             self.modo = 'alvo'
@@ -521,8 +596,8 @@ class Batalha:
         elif nome == 'habilidades':
             # clicar de novo em Habilidades fecha o quadro
             self.modo = 'acao' if self.modo == 'habilidades' else 'habilidades'
-        else:
-            registrar('Ainda não disponível!')
+        elif nome == 'itens':
+            self.modo = 'acao' if self.modo == 'itens' else 'itens'
 
     # ---------- atualização ----------
     def atualizar(self):
@@ -530,6 +605,15 @@ class Batalha:
         if not self.vez_do_jogador():
             self.modo = 'acao'
             self.habilidade_escolhida = None
+            self.item_escolhido = None
+
+        # Ao vencer, sorteia (uma única vez) as poções ganhas.
+        # Depois da última luta não há prêmio: o jogo acabou.
+        if self.luta.resultado == 'vitoria' and not self.drops_sorteados:
+            self.drops_sorteados = True
+            if self.fase + 1 < len(FASES):
+                self.drops = itens.sortear_drops(self.fase)
+                itens.ganhar(self.inventario, self.drops)
 
     # ---------- desenho ----------
     def desenhar(self, tela, mouse):
@@ -537,14 +621,14 @@ class Batalha:
         atual = self.luta.combatente_atual()
 
         self.desenhar_inimigos(tela, mouse, atual)
-        self.desenhar_personagens(tela, atual)
+        self.desenhar_personagens(tela, mouse, atual)
         self.desenhar_log(tela, atual)
         self.desenhar_menu(tela, mouse, atual)
 
         if self.luta.resultado:
             self.desenhar_fim(tela)
 
-    def desenhar_personagens(self, tela, atual):
+    def desenhar_personagens(self, tela, mouse, atual):
         for i, p in enumerate(self.grupo):
             rect = self.rect_personagem(i)
             normal, morto = self.sprites[id(p)]
@@ -562,6 +646,13 @@ class Batalha:
             barra_vida(tela, rect.x, y_vida, rect.width, p, moldura_barra)
             barra_mana(tela, rect.x, y_vida + ALTURA_BARRA + 2, rect.width,
                        p, moldura_barra)
+
+            # Escolhendo quem recebe a poção: contorna quem pode usá-la
+            if self.modo == 'alvo_aliado' and p.vida > 0 \
+                    and itens.pode_usar(self.item_escolhido, p)[0]:
+                sobre = self.rect_clique_personagem(i).collidepoint(mouse)
+                cor = (80, 255, 120) if sobre else (255, 255, 255)
+                pygame.draw.rect(tela, cor, rect.inflate(10, 10), 3)
 
             # Seta amarela sobre quem está na vez
             if p is atual and p.vida > 0:
@@ -612,6 +703,11 @@ class Batalha:
                 return 'Escolha o alvo (botão direito cancela)', (255, 255, 255)
             if self.modo == 'habilidades':
                 return 'Escolha uma habilidade (botão direito volta)', (255, 255, 255)
+            if self.modo == 'itens':
+                return 'Escolha uma poção (botão direito volta)', (255, 255, 255)
+            if self.modo == 'alvo_aliado':
+                nome = itens.nome_pocao(self.item_escolhido)
+                return f'{nome}: escolha quem vai usar (botão direito volta)', (255, 255, 255)
             return f'Vez de {atual.nome}: escolha uma ação', (255, 220, 40)
         return f'Turno de {atual.nome}...', (170, 190, 220)
 
@@ -638,14 +734,14 @@ class Batalha:
 
     def desenhar_menu(self, tela, mouse, atual):
         if self.vez_do_jogador():
-            if self.modo in ('acao', 'habilidades'):
+            if self.modo in ('acao', 'habilidades', 'itens'):
                 for nome, rect in BOTOES_ACAO.items():
                     if rect.collidepoint(mouse):
                         pygame.draw.rect(tela, (255, 255, 255), rect, 3)
 
-            if self.modo == 'habilidades':
-                # botão Habilidades "marcado" enquanto o quadro está aberto
-                pygame.draw.rect(tela, (255, 220, 40), BOTOES_ACAO['habilidades'], 3)
+            if self.modo in ('habilidades', 'itens'):
+                # botão "marcado" enquanto o quadro dele está aberto
+                pygame.draw.rect(tela, (255, 220, 40), BOTOES_ACAO[self.modo], 3)
                 self.desenhar_quadro(tela, mouse, atual)
         else:
             # Menu apagado durante o turno dos inimigos
@@ -657,10 +753,29 @@ class Batalha:
         tela.blit(quadro_habilidades, RECT_QUADRO)
 
         for rect, tipo, dados in self.botoes_quadro(atual):
+            baixo = rect.height == ALTURA_BOTAO_ITEM
+            normal = botao_item if baixo else botao_vazio
+            apagado = botao_item_apagado if baixo else botao_vazio_apagado
+            centro_y = rect.centery - (2 if baixo else 3)
+            alt_texto = rect.height - 12 if baixo else 34
+
             if tipo == 'voltar':
-                tela.blit(botao_vazio, rect)
-                img = texto_botao('VOLTAR', (255, 200, 50), rect.width - 24, 30)
-                tela.blit(img, img.get_rect(center=(rect.centerx, rect.centery - 3)))
+                tela.blit(normal, rect)
+                img = texto_botao('VOLTAR', (255, 200, 50), rect.width - 24, alt_texto)
+                tela.blit(img, img.get_rect(center=(rect.centerx, centro_y)))
+
+            elif tipo == 'item':
+                nome = itens.nome_pocao(dados)
+                qtd = self.inventario.get(dados, 0)
+                tem = qtd > 0
+                tela.blit(normal if tem else apagado, rect)
+                img = texto_botao(nome, (255, 200, 50) if tem else (150, 150, 150),
+                                  118, alt_texto)
+                tela.blit(img, img.get_rect(center=(rect.x + 70, centro_y)))
+                img = texto_botao(f'x{qtd}', (120, 205, 255) if tem else (230, 90, 80),
+                                  32, alt_texto)
+                tela.blit(img, img.get_rect(center=(rect.x + 152, centro_y)))
+
             else:
                 chave, nome, custo, _ = dados
                 tem_mana = atual.tem_mana(chave)
@@ -669,14 +784,14 @@ class Batalha:
                 if personalizada:
                     tela.blit(personalizada, rect)
                 else:
-                    tela.blit(botao_vazio if tem_mana else botao_vazio_apagado, rect)
+                    tela.blit(normal if tem_mana else apagado, rect)
                     cor_nome = (255, 200, 50) if tem_mana else (150, 150, 150)
                     cor_custo = (120, 205, 255) if tem_mana else (230, 90, 80)
                     # nome à esquerda, custo de mana à direita
-                    img = texto_botao(nome, cor_nome, 118, 34)
-                    tela.blit(img, img.get_rect(center=(rect.x + 70, rect.centery - 3)))
+                    img = texto_botao(nome, cor_nome, 118, alt_texto)
+                    tela.blit(img, img.get_rect(center=(rect.x + 70, centro_y)))
                     img = texto_botao(str(custo), cor_custo, 32, 26)
-                    tela.blit(img, img.get_rect(center=(rect.x + 152, rect.centery - 3)))
+                    tela.blit(img, img.get_rect(center=(rect.x + 152, centro_y)))
 
             if rect.collidepoint(mouse):
                 pygame.draw.rect(tela, (255, 255, 255), rect, 3)
@@ -685,14 +800,28 @@ class Batalha:
         escuro = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
         escuro.fill((0, 0, 0, 170))
         tela.blit(escuro, (0, 0))
+        meio = LARGURA // 2
 
         if self.luta.resultado == 'vitoria':
             ultima = self.fase + 1 >= len(FASES)
             titulo = 'VOCÊ VENCEU!' if ultima else 'VITÓRIA!'
             sub = 'Clique para voltar ao menu' if ultima else 'Clique para a próxima fase'
-            cor = (255, 220, 40)
-        else:
-            titulo, sub, cor = 'DERROTA...', 'Clique para voltar ao menu', (230, 70, 60)
+            texto(tela, titulo, (meio, 140), fonte_grande, (255, 220, 40), centro=True)
 
-        texto(tela, titulo, (LARGURA // 2, 290), fonte_grande, cor, centro=True)
-        texto(tela, sub, (LARGURA // 2, 390), fonte_info, centro=True)
+            if not ultima:
+                y = 235
+                if self.drops:
+                    texto(tela, 'Você conseguiu:', (meio, y), fonte_info, centro=True)
+                    for chave, qtd in self.drops.items():
+                        y += 38
+                        texto(tela, f'{qtd}x {itens.nome_pocao(chave)}', (meio, y),
+                              fonte_info, (120, 230, 140), centro=True)
+                else:
+                    texto(tela, 'Nenhuma poção desta vez...', (meio, y),
+                          fonte_info, (200, 200, 200), centro=True)
+
+            # acima da caixa de menu do fundo (que começa em y = 529)
+            texto(tela, sub, (meio, 390 if ultima else 505), fonte_info, centro=True)
+        else:
+            texto(tela, 'DERROTA...', (meio, 290), fonte_grande, (230, 70, 60), centro=True)
+            texto(tela, 'Clique para voltar ao menu', (meio, 390), fonte_info, centro=True)
