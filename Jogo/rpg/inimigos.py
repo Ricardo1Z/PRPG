@@ -136,4 +136,6 @@ INIMIGOS = {
 
 
 def criar_inimigo(chave):
-    return copy.deepcopy(INIMIGOS[chave])
+    inimigo = copy.deepcopy(INIMIGOS[chave])
+    inimigo.chave = chave  # usada pela batalha para achar o sprite
+    return inimigo
