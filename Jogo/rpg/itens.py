@@ -7,23 +7,27 @@ import random
 
 from .registro import registrar
 
-# chave -> nome, tipo ('hp' cura vida / 'mp' recupera mana), quanto recupera,
-# chance de cair ao vencer uma luta (0 a 1) e quantidade que cai (mín, máx)
+# chave -> nome, tipo ('hp' cura vida / 'mp' recupera mana / 'revive'), quanto
+# recupera, chance de cair ao vencer uma luta (0 a 1), quantidade que cai
+# (mín, máx) e quantidade no começo do jogo ('inicial'; padrão QUANTIDADE_INICIAL)
 POCOES = {
-    'hp_p': {'nome': 'POÇÃO DE HP P', 'tipo': 'hp', 'valor': 15,  'chance': 0.40, 'qtd': (1, 2)},
-    'hp_m': {'nome': 'POÇÃO DE HP M', 'tipo': 'hp', 'valor': 20,  'chance': 0.25, 'qtd': (1, 1)},
-    'hp_g': {'nome': 'POÇÃO DE HP G', 'tipo': 'hp', 'valor': 50, 'chance': 0.10, 'qtd': (1, 1)},
-    'mp_p': {'nome': 'POÇÃO DE MP P', 'tipo': 'mp', 'valor': 5,  'chance': 0.35, 'qtd': (1, 2)},
-    'mp_m': {'nome': 'POÇÃO DE MP M', 'tipo': 'mp', 'valor': 15,  'chance': 0.20, 'qtd': (1, 1)},
-    'mp_g': {'nome': 'POÇÃO DE MP G', 'tipo': 'mp', 'valor': 25,  'chance': 0.08, 'qtd': (1, 1)},
+    'hp_p': {'nome': 'POÇÃO DE HP P', 'tipo': 'hp', 'valor': 30,  'chance': 0.40, 'qtd': (1, 2), 'inicial': 2},
+    'hp_m': {'nome': 'POÇÃO DE HP M', 'tipo': 'hp', 'valor': 60,  'chance': 0.25, 'qtd': (1, 1), 'inicial': 0},
+    'hp_g': {'nome': 'POÇÃO DE HP G', 'tipo': 'hp', 'valor': 100, 'chance': 0.10, 'qtd': (1, 1), 'inicial': 0},
+    'mp_p': {'nome': 'POÇÃO DE MP P', 'tipo': 'mp', 'valor': 15,  'chance': 0.35, 'qtd': (1, 2), 'inicial': 2},
+    'mp_m': {'nome': 'POÇÃO DE MP M', 'tipo': 'mp', 'valor': 30,  'chance': 0.20, 'qtd': (1, 1), 'inicial': 0},
+    'mp_g': {'nome': 'POÇÃO DE MP G', 'tipo': 'mp', 'valor': 50,  'chance': 0.08, 'qtd': (1, 1), 'inicial': 0},
+
+    'revive': {'nome': 'POÇÃO DE REVIVER', 'tipo': 'revive', 'valor': 0.5, 'chance': 0.05,
+               'qtd': (1, 1), 'inicial': 0},
 }
 
-QUANTIDADE_INICIAL = 0        
+QUANTIDADE_INICIAL = 2        # de cada tipo (exceto as que definem 'inicial')
 BONUS_CHANCE_POR_FASE = 0.05  
 
 
 def inventario_inicial():
-    return {chave: QUANTIDADE_INICIAL for chave in POCOES}
+    return {chave: p.get('inicial', QUANTIDADE_INICIAL) for chave, p in POCOES.items()}
 
 
 def nome_pocao(chave):
@@ -33,6 +37,11 @@ def nome_pocao(chave):
 def pode_usar(chave, alvo):
     """Devolve (pode, motivo). A poção só vale em quem está vivo e precisa dela."""
     pocao = POCOES[chave]
+
+    if pocao['tipo'] == 'revive':
+        if alvo.vida > 0:
+            return False, f'{alvo.nome} não está derrotado!'
+        return True, ''
 
     if alvo.vida <= 0:
         return False, f'{alvo.nome} está derrotado!'
@@ -62,7 +71,11 @@ def usar_pocao(chave, usuario, alvo, inventario):
 
     inventario[chave] -= 1
 
-    if pocao['tipo'] == 'hp':
+    if pocao['tipo'] == 'revive':
+        alvo.reviver(pocao['valor'])
+        registrar(f'{usuario.nome} usou {pocao["nome"]}: '
+                  f'{alvo.nome} voltou com {alvo.vida} de vida!')
+    elif pocao['tipo'] == 'hp':
         recuperado = min(pocao['valor'], alvo.vida_maxima - alvo.vida)
         alvo.vida += recuperado
         registrar(f'{usuario.nome} usou {pocao["nome"]}: '

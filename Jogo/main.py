@@ -15,7 +15,8 @@ from rpg.telas import (
     botao_jogar,
     botoes_selecao,
 )
-from rpg.personagens import personagens_liberados
+from rpg.personagens import todos_personagens
+from rpg import progresso
 from rpg.batalha import Batalha
 
 personagens_selecionados = []
@@ -61,7 +62,7 @@ while rodando:
                     if len(personagens_selecionados) == 4:
                         # Cópias novas: a vida não "vaza" entre partidas
                         grupo = [
-                            copy.deepcopy(personagens_liberados[i])
+                            copy.deepcopy(todos_personagens[i])
                             for i in personagens_selecionados
                         ]
                         batalha = Batalha(grupo)
@@ -71,7 +72,7 @@ while rodando:
                     for i, botao in enumerate(botoes_selecao):
                         if botao.collidepoint(evento.pos):
 
-                            if i >= len(personagens_liberados):
+                            if i >= progresso.quantos_liberados():
                                 break
 
                             if i in personagens_selecionados:
