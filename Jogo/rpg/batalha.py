@@ -123,7 +123,24 @@ def nove_fatias(img, largura, altura, borda):
     return s
 
 
-fundo = pygame.transform.scale(carregar('batalha1.png', TELAS).convert(), (LARGURA, ALTURA))
+fundos_batalha = {
+    1: pygame.transform.scale(
+        carregar('batalha1.png', TELAS).convert(),
+        (LARGURA, ALTURA)
+    ),
+    2: pygame.transform.scale(
+        carregar('batalha2.png', TELAS).convert(),
+        (LARGURA, ALTURA)
+    ),
+    3: pygame.transform.scale(
+        carregar('batalha3.png', TELAS).convert(),
+        (LARGURA, ALTURA)
+    )
+}
+
+# Fundo padrão
+fundo = fundos_batalha[1]
+
 # Os botões de ação fazem parte do fundo: recorta cada um para poder ampliá-lo
 img_botoes_acao = {nome: fundo.subsurface(rect).copy() for nome, rect in BOTOES_ACAO.items()}
 img_mensagens = carregar('mensagens.png').convert_alpha()
@@ -716,7 +733,10 @@ class Batalha:
 
     # ---------- desenho ----------
     def desenhar(self, tela, mouse):
-        tela.blit(fundo, (0, 0))
+        numero_fundo = (self.fase // 5) + 1
+        fundo_atual = fundos_batalha[numero_fundo]
+
+        tela.blit(fundo_atual, (0, 0))
         atual = self.luta.combatente_atual()
 
         self.desenhar_inimigos(tela, mouse, atual)
