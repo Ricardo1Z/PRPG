@@ -62,10 +62,8 @@ class Luta:
 
             if combatente and combatente.vida > 0:
 
-                # Cada personagem trata o que acontece no início do seu turno
-                # (ex.: o Paladino remove o Escudo de Compilação)
-                if combatente in self.grupo_jogador:
-                    combatente.inicio_do_turno()
+                # Início do turno: escudos e reduções de defesa vão acabando
+                combatente.inicio_do_turno()
 
                 return
 
@@ -92,7 +90,9 @@ class Luta:
         elif acao in combatente.HABILIDADES:
             # Habilidade do personagem (classe dele). Se não deu certo
             # (alvo inválido, sem mana...), o turno NÃO passa.
-            if not combatente.usar_habilidade(acao, alvo, self.grupo_inimigos):
+            if not combatente.usar_habilidade(
+                acao, alvo, self.grupo_inimigos, self.grupo_jogador
+            ):
                 return
 
         else:
