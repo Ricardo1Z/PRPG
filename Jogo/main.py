@@ -18,6 +18,7 @@ from rpg.telas import (
 from rpg.personagens import todos_personagens
 from rpg import progresso
 from rpg.batalha import Batalha
+from rpg.musica import tocar, MUSICA_MENU, musica_da_fase
 
 personagens_selecionados = []
 batalha = None
@@ -84,15 +85,19 @@ while rodando:
                             break
 
     if tela_atual == 'menu':
+        tocar(MUSICA_MENU)
         tela_menu(tela, mouse)
 
     elif tela_atual == 'opcao':
+        tocar(MUSICA_MENU)
         tela_opcoes(tela, mouse)
 
     elif tela_atual == 'selecao':
+        tocar(MUSICA_MENU)
         tela_selecao(tela, mouse, personagens_selecionados)
 
     elif tela_atual == 'batalha':
+        tocar(musica_da_fase(batalha.fase + 1))
         batalha.atualizar()
         batalha.desenhar(tela, mouse)
 
