@@ -1,7 +1,10 @@
 __pycache__/
-*.pyc/
+*.pyc
 
 .venv/
 venv/
 
 .env
+
+Jogo/opcoes.json
+Jogo/save.json

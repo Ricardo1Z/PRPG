@@ -1,4 +1,4 @@
-from .combatentes import Combatente
+from .combatentes import Combatente, causar_dano
 from .registro import registrar
 
 
@@ -16,6 +16,7 @@ class Personagem(Combatente):
       'nenhum'  -> ()         age só no próprio personagem
       'time'    -> (aliados)  todos os aliados vivos (inclui ele mesmo)
       'aliado'  -> (alvo)     um aliado vivo e ferido, escolhido pelo jogador
+      'protegido' -> (alvo)   qualquer aliado vivo (ferido ou não), escolhido
       'mortos'  -> (mortos)   todos os aliados derrotados
       'morto'   -> (alvo)     um aliado derrotado, escolhido pelo jogador
     """
@@ -23,6 +24,12 @@ class Personagem(Combatente):
     HABILIDADES = {}
     CLASSE = ''
     SPRITE = ''
+
+    # ---------- balanceamento: recuperação ----------
+    MANA_POR_TURNO = 2        # mana recuperada no início de cada turno
+    DESCANSO_VIDA = 0.20      # fração da vida máx. recuperada entre fases
+    DESCANSO_MANA = 0.35      # fração da mana máx. recuperada entre fases
+    DESCANSO_REVIVER = 0      # derrotados voltam com essa fração na fase seguinte
 
     def __init__(self, nome, vida_maxima, vida, ataque, defesa, velocidade,
                  mana_maxima):
@@ -33,10 +40,26 @@ class Personagem(Combatente):
         # Engenheiro). A Luta coloca-o na ordem de turnos; é zerado a cada fase.
         self.invocacao = None
 
-    # ---------- mana e habilidades ----------
-    def restaurar_mana(self):
-        self.mana = self.mana_maxima
+    def inicio_do_turno(self):
+        super().inicio_do_turno()
+        if self.vida > 0:
+            self.mana = min(self.mana_maxima, self.mana + self.MANA_POR_TURNO)
 
+    def descansar(self):
+        """Chamado entre uma fase e a outra: recupera parte da vida e da mana.
+        Quem foi derrotado volta com um pouco de vida."""
+        if self.vida <= 0:
+            if self.DESCANSO_REVIVER > 0:
+                self.reviver(self.DESCANSO_REVIVER)
+            else:
+                return
+        else:
+            self.vida = min(self.vida_maxima,
+                            self.vida + int(self.vida_maxima * self.DESCANSO_VIDA))
+        self.mana = min(self.mana_maxima,
+                        self.mana + int(self.mana_maxima * self.DESCANSO_MANA))
+
+    # ---------- mana e habilidades ----------
     def tem_mana(self, chave):
         return self.mana >= self.HABILIDADES[chave]['custo']
 
@@ -73,6 +96,9 @@ class Personagem(Combatente):
                 registrar(f'{alvo.nome} já está com a vida cheia!')
                 return False
 
+        if tipo == 'protegido' and alvo not in aliados_vivos:
+            return False
+
         if tipo == 'mortos' and not mortos:
             registrar('Nenhum aliado está derrotado!')
             return False
@@ -92,7 +118,7 @@ class Personagem(Combatente):
         self.mana -= info['custo']
         efeito = getattr(self, chave)
 
-        if tipo in ('inimigo', 'aliado', 'morto'):
+        if tipo in ('inimigo', 'aliado', 'protegido', 'morto'):
             efeito(alvo)
         elif tipo == 'todos':
             efeito(vivos)
@@ -106,16 +132,6 @@ class Personagem(Combatente):
         return True
 
     # ---------- utilitários compartilhados ----------
-    def _causar_dano(self, alvo, dano, mensagem):
-        alvo.vida = max(0, alvo.vida - dano)
-        registrar(mensagem)
-
-        if alvo.defendendo:
-            alvo.remover_defesa()
-
-        if alvo.vida == 0:
-            registrar(f'{alvo.nome} foi derrotado!')
-
     def _golpes(self, alvo, golpes, dano_base):
         """Vários golpes seguidos no mesmo alvo (a defesa conta em cada um).
         Retorna o dano total causado. Depois de anunciar o resultado, chame
@@ -149,7 +165,7 @@ class Guerreiro(Personagem):
     }
 
     def __init__(self):
-        super().__init__('Python', 100, 100, 15, 8, 3, mana_maxima=40)
+        super().__init__('Python', 100, 100, 20, 8, 3, mana_maxima=40)
 
     def provocacao_global(self):
         # Até 2 turnos do Guerreiro: todos os inimigos só atacam ele,
@@ -163,7 +179,7 @@ class Guerreiro(Personagem):
     def picada_mortal(self, alvo):
         # Dano fixo: ignora completamente a defesa
         dano = 20
-        self._causar_dano(
+        causar_dano(
             alvo, dano,
             f'{self.nome} usou Picada Mortal: {dano} de dano em {alvo.nome}!'
         )
@@ -171,7 +187,7 @@ class Guerreiro(Personagem):
     def salto_de_bits(self, alvo):
         # Ignora 50% da defesa do inimigo
         dano = max(1, 35 - alvo.defesa // 2)
-        self._causar_dano(
+        causar_dano(
             alvo, dano,
             f'{self.nome} usou Salto de Bits: {dano} de dano em {alvo.nome}!'
         )
@@ -190,12 +206,12 @@ class Mago(Personagem):
     }
 
     def __init__(self):
-        super().__init__('Java', 80, 80, 25, 7, 2, mana_maxima=60)
+        super().__init__('Java', 80, 80, 20, 7, 2, mana_maxima=60)
 
     def lancar_excecao(self, alvo):
         # Dano singular simples (a defesa do alvo conta normalmente)
         dano = max(1, 32 - alvo.defesa)
-        self._causar_dano(
+        causar_dano(
             alvo, dano,
             f'{self.nome} usou Lançar Exceção: {dano} de dano em {alvo.nome}!'
         )
@@ -205,14 +221,14 @@ class Mago(Personagem):
 
         for inimigo in alvos:
             dano = max(1, 25 - inimigo.defesa)
-            self._causar_dano(
+            causar_dano(
                 inimigo, dano, f'{inimigo.nome} recebeu {dano} de dano!'
             )
 
     def meteoro_de_variavel(self, alvo):
         # Dano singular fixo: ignora completamente a defesa
         dano = 45
-        self._causar_dano(
+        causar_dano(
             alvo, dano,
             f'{self.nome} lançou Meteoro de Variável: '
             f'{dano} de dano (ignora defesa) em {alvo.nome}!'
@@ -233,7 +249,7 @@ class Ladino(Personagem):
     BONUS_PREPARADO = 1.5  # dano do próximo ataque/habilidade depois da Promessa
 
     def __init__(self):
-        super().__init__('JavaScript', 90, 90, 20, 6, 5, mana_maxima=40)
+        super().__init__('JavaScript', 90, 90, 25, 6, 5, mana_maxima=40)
         self.golpe_preparado = False
 
     # ---------- Promessa Pendente ----------
@@ -254,8 +270,7 @@ class Ladino(Personagem):
 
     def _resolver_promessa(self):
         """Depois de atacar: gasta o bônus e sai da intangibilidade."""
-        if self.golpe_preparado:
-            self.golpe_preparado = False
+        self.golpe_preparado = False
         if self.intangivel > 0:
             self.remover_efeito('promessa_pendente')
             registrar(f'{self.nome} atacou e deixou de ser intangível!')
@@ -285,7 +300,7 @@ class Ladino(Personagem):
     def investida_assincrona(self, alvo):
         # Ignora 25% da defesa do inimigo
         dano = max(1, self._poder(30) - int(alvo.defesa * 0.75))
-        self._causar_dano(
+        causar_dano(
             alvo, dano,
             f'{self.nome} usou Investida Assíncrona: {dano} de dano em {alvo.nome}!'
         )
@@ -298,7 +313,7 @@ class Ladino(Personagem):
                 break
 
             dano = max(1, self._poder(15) - alvo.defesa)
-            self._causar_dano(
+            causar_dano(
                 alvo, dano, f'Golpe {golpe}: {dano} de dano em {alvo.nome}!'
             )
 
@@ -310,13 +325,14 @@ class Paladino(Personagem):
     CLASSE = 'Paladino'
     SPRITE = 'Cpaladino.png'
     HABILIDADES = {
-        'escudo_de_compilacao': {'nome': 'Escudo de Compilação', 'custo': 10, 'alvo': 'nenhum'},
+        'escudo_de_compilacao': {'nome': 'Escudo de Compilação', 'custo': 10, 'alvo': 'protegido'},
         'codigo_divino': {'nome': 'Código Divino', 'custo': 30, 'alvo': 'inimigo'},
         'restaurar_instancia': {'nome': 'Restaurar Instância', 'custo': 35, 'alvo': 'morto'},
     }
+    CURA_ESCUDO = 15  # cura leve que o Escudo de Compilação dá junto
 
     def __init__(self):
-        super().__init__('C#', 150, 150, 10, 10, 1, mana_maxima=50)
+        super().__init__('C#', 140, 140, 18, 10, 1, mana_maxima=50)
 
     def restaurar_instancia(self, alvo):
         # Revive UM aliado derrotado com 50% da vida
@@ -324,16 +340,22 @@ class Paladino(Personagem):
         registrar(f'{self.nome} usou Restaurar Instância: '
                   f'{alvo.nome} voltou com {alvo.vida} de vida!')
 
-    def escudo_de_compilacao(self):
-        # +20 de defesa até o próximo turno do Paladino
-        self.aplicar_efeito('escudo_de_compilacao', 'Escudo de Compilação',
+    def escudo_de_compilacao(self, alvo):
+        # Em qualquer aliado vivo (ou nele mesmo): +20 de defesa até o
+        # próximo turno do alvo e uma cura leve
+        alvo.aplicar_efeito('escudo_de_compilacao', 'Escudo de Compilação',
                             'defesa', 20, 1)
-        registrar(f'{self.nome} usou Escudo de Compilação! Defesa +20')
+        curado = min(self.CURA_ESCUDO, alvo.vida_maxima - alvo.vida)
+        alvo.vida += curado
+        quem = 'em si mesmo' if alvo is self else f'em {alvo.nome}'
+        cura = f', +{curado} de vida' if curado else ''
+        registrar(f'{self.nome} usou Escudo de Compilação {quem}! '
+                  f'Defesa +20{cura}')
 
     def codigo_divino(self, alvo):
         # Ignora 50% da defesa do alvo
         dano = max(1, 40 - alvo.defesa // 2)
-        self._causar_dano(
+        causar_dano(
             alvo, dano,
             f'{self.nome} usou Código Divino: {dano} de dano em {alvo.nome}!'
         )
@@ -349,7 +371,7 @@ class Torreta(Combatente):
     SPRITE = 'torreta.png'
 
     def __init__(self):
-        super().__init__('Torreta', 45, 45, 16, 6, 2)
+        super().__init__('Torreta', 55, 55, 18, 6, 2)
 
 
 class Engenheiro(Personagem):
@@ -391,7 +413,7 @@ class Engenheiro(Personagem):
     def falha_de_segmentacao(self, alvo):
         # Dano singular (a defesa do alvo conta normalmente)
         dano = max(1, 36 - alvo.defesa)
-        self._causar_dano(
+        causar_dano(
             alvo, dano,
             f'{self.nome} usou Falha de Segmentação: {dano} de dano em {alvo.nome}!'
         )
@@ -410,12 +432,12 @@ class Lanceiro(Personagem):
     }
 
     def __init__(self):
-        super().__init__('Delphi', 120, 120, 18, 8, 3, mana_maxima=45)
+        super().__init__('Delphi', 110, 110, 18, 8, 3, mana_maxima=45)
 
     def lanca_perfurante(self, alvo):
         # Dano singular e, se o alvo sobreviver, -6 de defesa por 3 turnos dele
         dano = max(1, 24 - alvo.defesa)
-        self._causar_dano(
+        causar_dano(
             alvo, dano,
             f'{self.nome} usou Lança Perfurante: {dano} de dano em {alvo.nome}!'
         )
@@ -437,7 +459,7 @@ class Lanceiro(Personagem):
 
         for inimigo in alvos:
             dano = max(1, 22 - inimigo.defesa)
-            self._causar_dano(
+            causar_dano(
                 inimigo, dano, f'{inimigo.nome} recebeu {dano} de dano!'
             )
 
@@ -451,10 +473,11 @@ class Arqueiro(Personagem):
     HABILIDADES = {
         'chuva_de_requisicoes': {'nome': 'Chuva de Requisições', 'custo': 25, 'alvo': 'todos'},
         'injecao_de_sql': {'nome': 'Injeção de SQL', 'custo': 20, 'alvo': 'inimigo'},
+        'flecha_depreciada': {'nome': 'Flecha Depreciada', 'custo': 20, 'alvo': 'inimigo'},
     }
 
     def __init__(self):
-        super().__init__('PHP', 85, 85, 22, 5, 4, mana_maxima=50)
+        super().__init__('PHP', 95, 95, 22, 6, 4, mana_maxima=50)
 
     def chuva_de_requisicoes(self, alvos):
         # Dano em área, 3 golpes em cada inimigo
@@ -468,10 +491,24 @@ class Arqueiro(Personagem):
     def injecao_de_sql(self, alvo):
         # Dano singular fixo: ignora completamente a defesa
         dano = 30
-        self._causar_dano(
+        causar_dano(
             alvo, dano,
             f'{self.nome} usou Injeção de SQL: {dano} de dano (ignora defesa) em {alvo.nome}!'
         )
+
+    def flecha_depreciada(self, alvo):
+        # Dano singular e, se o alvo sobreviver, -5 de defesa e -6 de ataque
+        # por 3 turnos dele
+        dano = max(1, 26 - alvo.defesa)
+        causar_dano(
+            alvo, dano,
+            f'{self.nome} usou Flecha Depreciada: {dano} de dano em {alvo.nome}!'
+        )
+        if alvo.vida > 0:
+            rotulo = 'Flecha Depreciada'
+            alvo.aplicar_efeito('flecha_depreciada_def', rotulo, 'defesa', -5, 3)
+            alvo.aplicar_efeito('flecha_depreciada_atq', rotulo, 'ataque', -6, 3)
+            registrar(f'{alvo.nome} ficou enfraquecido: Defesa -5, Ataque -6!')
 
 
 # =====================================================================
@@ -487,7 +524,7 @@ class Hexxer(Personagem):
     }
 
     def __init__(self):
-        super().__init__('Ruby', 75, 75, 18, 5, 2, mana_maxima=70)
+        super().__init__('Ruby', 85, 85, 18, 6, 2, mana_maxima=70)
 
     def reiniciar_processo(self, mortos):
         # Revive todos os aliados derrotados com 30% da vida
@@ -498,17 +535,17 @@ class Hexxer(Personagem):
             registrar(f'{aliado.nome} voltou com {aliado.vida} de vida!')
 
     def cura_em_bloco(self, alvo):
-        recuperado = min(40, alvo.vida_maxima - alvo.vida)
+        recuperado = min(50, alvo.vida_maxima - alvo.vida)
         alvo.vida += recuperado
         registrar(f'{self.nome} usou Cura em Bloco: '
                   f'{alvo.nome} recuperou {recuperado} de vida!')
 
     def monkey_patch(self, alvos):
-        # Reduz em 6 a defesa de todos os inimigos por 3 turnos de cada um
-        registrar(f'{self.nome} usou Monkey Patch! Defesa dos inimigos -6')
+        # Reduz em 8 a defesa de todos os inimigos por 3 turnos de cada um
+        registrar(f'{self.nome} usou Monkey Patch! Defesa dos inimigos -8')
 
         for inimigo in alvos:
-            inimigo.aplicar_efeito('monkey_patch', 'Monkey Patch', 'defesa', -6, 3)
+            inimigo.aplicar_efeito('monkey_patch', 'Monkey Patch', 'defesa', -8, 3)
 
 
 # =====================================================================

@@ -3,8 +3,7 @@ import copy
 import pygame
 
 from rpg.telas import (
-    LARGURA,
-    ALTURA,
+    evento_opcoes,
     tela,
     tela_selecao,
     tela_menu,
@@ -18,7 +17,7 @@ from rpg.telas import (
 from rpg.personagens import todos_personagens
 from rpg import progresso
 from rpg.batalha import Batalha
-from rpg.musica import tocar, MUSICA_MENU, musica_da_fase
+from rpg.musica import tocar, MUSICA_MENU, MUSICA_VITORIA, musica_da_fase
 
 personagens_selecionados = []
 batalha = None
@@ -41,6 +40,10 @@ while rodando:
                 tela_atual = 'menu'
                 batalha = None
 
+        elif tela_atual == 'opcao':
+            if evento_opcoes(evento) == 'menu':
+                tela_atual = 'menu'
+
         elif evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
 
             if tela_atual == 'menu':
@@ -50,10 +53,6 @@ while rodando:
                             rodando = False
                         else:
                             tela_atual = clique_menu[i]
-
-            elif tela_atual == 'opcao':
-                if botao_voltar.collidepoint(evento.pos):
-                    tela_atual = 'menu'
 
             elif tela_atual == 'selecao':
                 if botao_voltar.collidepoint(evento.pos):
@@ -84,22 +83,21 @@ while rodando:
 
                             break
 
-    if tela_atual == 'menu':
-        tocar(MUSICA_MENU)
-        tela_menu(tela, mouse)
-
-    elif tela_atual == 'opcao':
-        tocar(MUSICA_MENU)
-        tela_opcoes(tela, mouse)
-
-    elif tela_atual == 'selecao':
-        tocar(MUSICA_MENU)
-        tela_selecao(tela, mouse, personagens_selecionados)
-
-    elif tela_atual == 'batalha':
-        tocar(musica_da_fase(batalha.fase + 1))
+    if tela_atual == 'batalha':
+        if batalha.luta.resultado == 'vitoria':
+            tocar(MUSICA_VITORIA, repetir=False)  # toca uma vez na tela de vitória
+        else:
+            tocar(musica_da_fase(batalha.fase + 1))
         batalha.atualizar()
         batalha.desenhar(tela, mouse)
+    else:
+        tocar(MUSICA_MENU)
+        if tela_atual == 'menu':
+            tela_menu(tela, mouse)
+        elif tela_atual == 'opcao':
+            tela_opcoes(tela, mouse)
+        elif tela_atual == 'selecao':
+            tela_selecao(tela, mouse, personagens_selecionados)
 
     pygame.display.flip()
     clock.tick(60)

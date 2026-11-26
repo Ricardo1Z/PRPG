@@ -2,13 +2,15 @@ import math
 
 import pygame
 
-from .telas import (LARGURA, ALTURA, SPRITES, INIMIGOS, PERSONAGENS, TELAS,
-                    INTERFACE, carregar, Zoom, ampliar)
+from .telas import (LARGURA, ALTURA, INIMIGOS, PERSONAGENS, TELAS, INTERFACE,
+                    carregar, cursor_vertical, Zoom, ampliar)
+from . import fonte_pixel as fp
 from .luta import Luta
 from .inimigos import criar_inimigo
 from . import itens, progresso
 from .personagens import todos_personagens
 from .registro import mensagens, limpar, registrar
+from .musica import tocar_dano
 
 # Cada item é uma luta; ao vencer, passa para a próxima.
 # Use as chaves do dicionário INIMIGOS (inimigos.py).
@@ -17,17 +19,17 @@ FASES = [
     ['slime', 'aranha'],                       # 2
     ['inseto', 'goblin'],                      # 3
     ['aranha', 'goblin', 'inseto'],            # 4
-    ['dragao', 'golem', 'virus'],              # 5  (chefes)
+    ['dragao', 'goblin', 'slime'],             # 5  (chefe)
     ['inseto', 'aranha', 'goblin'],            # 6
     ['doppelganger', 'virus'],                 # 7
     ['golem', 'aranha', 'goblin'],             # 8
     ['virus', 'doppelganger', 'golem'],        # 9
-    ['compilador'],                            # 10 (chefe)
+    ['goblin', 'compilador', 'aranha'],        # 10 (chefe)
     ['doppelganger', 'virus', 'inseto'],       # 11
     ['golem', 'doppelganger'],                 # 12
     ['dragao', 'aranha', 'goblin'],            # 13
     ['dragao', 'golem', 'doppelganger'],       # 14
-    ['bug_original'],                          # 15 (chefe final)
+    ['inseto', 'bug_original', 'virus'],       # 15 (chefe final)
 ]
 
 # Botões desenhados em batalha.png
@@ -97,17 +99,23 @@ ALTURA_PADRAO_INIMIGO = 120
 # tabela de alturas acima é ignorada.
 ESCALA_INIMIGOS = None
 
-# Posição dos inimigos: "chão" (onde ficam os pés). Com 3 inimigos, o maior
-# fica ao fundo, no centro, e os outros dois na frente, nas laterais.
-CHAO_INIMIGOS = 500
+# Posição dos inimigos: "chão" (onde ficam os pés). O chão dos cenários
+# começa por volta de y = 455; quanto mais para baixo, mais "perto" da tela.
+# Com 3 inimigos, o maior fica ao fundo, no centro, e os outros dois na
+# frente, nas laterais. Todos ficam à direita de x = 876 (caixa do menu).
+CHAO_INIMIGOS = 590         # 1 inimigo
+CHAO_FUNDO_INIMIGOS = 470   # quem está mais ao fundo (logo depois da borda do chão)
+CHAO_FRENTE_INIMIGOS = 650  # quem está mais à frente
 
 # Formação do grupo: 2 linhas x 2 colunas.
 # A linha de cima (1º e 2º escolhidos) fica NA FRENTE (mais perto dos
 # inimigos); a de baixo fica atrás, recuada para a esquerda.
 # DESLOC_TRAS = 0 alinha tudo em uma grade reta.
-LINHAS_Y = (270, 440)   # y do sprite de cada linha (cabem nome + vida + mana)
-X_FRENTE = 190          # x do 1º personagem da linha da frente
-ESPACO_X = 130          # distância horizontal entre os dois da linha
+# O chão dos 3 cenários começa por volta de y = 445-455: os pés da linha de cima
+# (y + 96) ficam logo abaixo disso, para ninguém parecer flutuar.
+LINHAS_Y = (372, 545)   # y do sprite de cada linha (cabem nome + vida + mana)
+X_FRENTE = 170          # x do 1º personagem da linha da frente
+ESPACO_X = 125          # distância horizontal entre os dois da linha
 DESLOC_TRAS = 80        # quanto a linha de trás recua para a esquerda
 
 # Invocações (Torreta): ficam à frente do time, na altura da linha da frente
@@ -142,45 +150,78 @@ def nove_fatias(img, largura, altura, borda):
     return s
 
 
+# Um fundo a cada 5 fases (batalha1.png, batalha2.png, batalha3.png)
 fundos_batalha = {
-    1: pygame.transform.scale(
-        carregar('batalha1.png', TELAS).convert(),
-        (LARGURA, ALTURA)
-    ),
-    2: pygame.transform.scale(
-        carregar('batalha2.png', TELAS).convert(),
-        (LARGURA, ALTURA)
-    ),
-    3: pygame.transform.scale(
-        carregar('batalha3.png', TELAS).convert(),
-        (LARGURA, ALTURA)
-    )
+    n: pygame.transform.scale(carregar(f'batalha{n}.png', TELAS).convert(),
+                              (LARGURA, ALTURA))
+    for n in (1, 2, 3)
 }
 
-# Fundo padrão
-fundo = fundos_batalha[1]
-
 # Os botões de ação fazem parte do fundo: recorta cada um para poder ampliá-lo
-img_botoes_acao = {nome: fundo.subsurface(rect).copy() for nome, rect in BOTOES_ACAO.items()}
+img_botoes_acao = {nome: fundos_batalha[1].subsurface(rect).copy()
+                   for nome, rect in BOTOES_ACAO.items()}
 img_mensagens = carregar('mensagens.png').convert_alpha()
 
 # contorno.png tem 4 px de borda; esticado para a largura do sprite.
 # A mesma moldura é usada nas barras de vida e de mana.
 BORDA_BARRA = 4
 ALTURA_BARRA = 22
-moldura_barra = nove_fatias(
-    carregar('contorno.png').convert_alpha(),
-    TAM_PERSONAGEM, ALTURA_BARRA, BORDA_BARRA
+_contorno = carregar('contorno.png').convert_alpha()
+moldura_barra = nove_fatias(_contorno, TAM_PERSONAGEM, ALTURA_BARRA, BORDA_BARRA)
+moldura_invocacao = nove_fatias(_contorno, TAM_INVOCACAO, ALTURA_BARRA, BORDA_BARRA)
+# Inimigos usam a moldura vermelha; chefes, a moldura própria (borda direita
+# mais grossa, por isso a fatia de 8 px para não deformar o canto).
+CHEFES = {'dragao', 'compilador', 'bug_original'}
+moldura_inimigo = nove_fatias(
+    carregar('contorno_inimigo.png').convert_alpha(),
+    TAM_INIMIGO, ALTURA_BARRA, BORDA_BARRA
 )
-moldura_invocacao = nove_fatias(
-    carregar('contorno.png').convert_alpha(),
-    TAM_INVOCACAO, ALTURA_BARRA, BORDA_BARRA
+moldura_chefe = nove_fatias(
+    carregar('contorno_boss.png').convert_alpha(),
+    TAM_INIMIGO, ALTURA_BARRA, 8
 )
-fonte_nome = pygame.font.Font(None, 24)
-fonte_hp = pygame.font.Font(None, 18)
-fonte_log = pygame.font.Font(None, 22)
-fonte_info = pygame.font.Font(None, 34)
-fonte_grande = pygame.font.Font(None, 120)
+# Telas de fim de luta: vitoria_fase.png é semitransparente (fica por cima
+# da batalha); vitoria_final.png ocupa a tela inteira.
+tela_vitoria_fase = pygame.transform.scale(
+    carregar('vitoria_fase.png', TELAS).convert_alpha(), (LARGURA, ALTURA))
+tela_vitoria_final = pygame.transform.scale(
+    carregar('vitoria_final.png', TELAS).convert(), (LARGURA, ALTURA))
+
+# ---------- texto (fonte pixel: rpg/fonte_pixel.py) ----------
+# Tamanho do "pixel" da letra: 2 -> letras de 14 px, 3 -> 21 px, 4 -> 28 px.
+TAM_NOME = 2
+TAM_HP = 2
+ESCALA_HP = 0.75      # números das barras um pouco menores (letras de ~10 px)
+TAM_LOG = 2
+TAM_DANO = 3
+ESPACO_LOG = 20       # px entre as linhas do painel de mensagens
+
+
+def _cores(cor):
+    """Aceita um degradê pronto (lista de fonte_pixel) ou uma cor só."""
+    if isinstance(cor, list):
+        return cor
+    if cor == (255, 255, 255):
+        return fp.BRANCO
+    return fp.degrade(cor)
+
+
+def escrita(conteudo, tam=TAM_NOME, cor=(255, 255, 255), sombra=1):
+    """Superfície com o texto na fonte pixel. Com sombra=1, o meio da letra
+    fica exatamente no meio da superfície (dá para centralizar pelo rect)."""
+    return fp.texto(conteudo, cores=_cores(cor), sombra=sombra, tam_bloco=tam)
+
+
+def largura_texto(conteudo, tam):
+    """Largura (px) que o texto vai ter, sem precisar desenhá-lo."""
+    return (len(fp.mascara(conteudo)[0]) + 2) * tam
+
+
+# Camadas escuras semitransparentes (criadas uma vez, não a cada quadro)
+sombra_menu = pygame.Surface(CAIXA_MENU.size, pygame.SRCALPHA)
+sombra_menu.fill((0, 0, 0, 150))
+escuro_fim = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
+escuro_fim.fill((0, 0, 0, 170))
 
 
 def escurecer(superficie):
@@ -227,9 +268,8 @@ def imagem_inimigo(chave):
     return _cache_inimigos[chave]
 
 
-botao_vazio = pygame.transform.scale(
-    carregar('botao_habilidade.png').convert_alpha(), TAM_BOTAO_HAB
-)
+_botao_habilidade = carregar('botao_habilidade.png').convert_alpha()
+botao_vazio = pygame.transform.scale(_botao_habilidade, TAM_BOTAO_HAB)
 botao_vazio_apagado = escurecer(botao_vazio)
 
 
@@ -247,9 +287,7 @@ def recortar_linhas(img, trechos):
 
 # 54 -> 34 px: tira 10 linhas da faixa azul-esverdeada e 10 da azul-escura
 # (faixas de cor constante), então o botão não fica distorcido.
-_botao_54 = pygame.transform.scale(
-    carregar('botao_habilidade.png').convert_alpha(), (TAM_BOTAO_HAB[0], 54)
-)
+_botao_54 = pygame.transform.scale(_botao_habilidade, (TAM_BOTAO_HAB[0], 54))
 botao_item = recortar_linhas(_botao_54, [(0, 16), (26, 29), (39, 54)])
 botao_item_apagado = escurecer(botao_item)
 
@@ -284,15 +322,6 @@ RECT_QUADRO_ITENS = quadro_itens.get_rect(
     midbottom=(CAIXA_MENU.centerx, CAIXA_MENU.top - 2)
 )
 
-# ---------- texto dos botões ----------
-# Se existir assets/fonts/pixel.ttf (uma fonte pixel-art), ela é usada; senão,
-# a fonte padrão do pygame (suavizada, bem mais fácil de ler em tamanho pequeno).
-_ttf_pixel = SPRITES.parent / 'fonts' / 'pixel.ttf'
-_arquivo_fonte = str(_ttf_pixel) if _ttf_pixel.exists() else None
-SUAVIZAR_TEXTO = _arquivo_fonte is None   # fonte pixel-art fica melhor SEM suavização
-_TAMANHOS_FONTE = (28, 26, 24, 22, 20, 18, 16, 15, 14) if _arquivo_fonte is None \
-    else (24, 16, 12, 8)   # múltiplos da grade da fonte: pixels nítidos
-FONTES_BOTAO = {tam: pygame.font.Font(_arquivo_fonte, tam) for tam in _TAMANHOS_FONTE}
 _cache_texto = {}
 
 
@@ -304,8 +333,6 @@ DURACAO_PULO = 300           # ms da ampliação
 ESCALA_DANO = 1.1            # tamanho máximo no meio do pulo
 DURACAO_NUMERO = 1000        # ms até o número sumir
 SUBIDA_NUMERO = 45           # quantos pixels o número sobe
-COR_DANO = (235, 40, 40)
-fonte_dano = pygame.font.Font(_arquivo_fonte, 24 if _arquivo_fonte else 40)
 
 
 def silhueta_branca(img):
@@ -317,86 +344,66 @@ def silhueta_branca(img):
 
 def texto_dano(valor):
     """'-N' vermelho com contorno escuro (para ler sobre qualquer fundo)."""
-    conteudo = f'-{valor}'
-    frente = fonte_dano.render(conteudo, SUAVIZAR_TEXTO, COR_DANO)
-    contorno = fonte_dano.render(conteudo, SUAVIZAR_TEXTO, (40, 0, 0))
-    w, h = frente.get_size()
-    s = pygame.Surface((w + 4, h + 4), pygame.SRCALPHA)
-    for dx, dy in ((0, 2), (4, 2), (2, 0), (2, 4), (0, 0), (4, 0), (0, 4), (4, 4)):
-        s.blit(contorno, (dx, dy))
-    s.blit(frente, (2, 2))
-    return s
+    # cópia: o alpha muda enquanto o número some, e a original fica no cache
+    return escrita(f'-{valor}', TAM_DANO, fp.VERMELHO).copy()
 
 
-def _quebrar_em_duas(conteudo, fonte):
+def _quebrar_em_duas(conteudo, tam):
     """Divide o texto em 2 linhas o mais equilibradas possível (ou None)."""
     palavras = conteudo.split()
     melhor = None
     for k in range(1, len(palavras)):
         linhas = [' '.join(palavras[:k]), ' '.join(palavras[k:])]
-        pior = max(fonte.size(l)[0] for l in linhas)
+        pior = max(largura_texto(l, tam) for l in linhas)
         if melhor is None or pior < melhor[0]:
             melhor = (pior, linhas)
     return melhor[1] if melhor else None
 
 
-def texto_botao(conteudo, cor, largura_max, altura_max=34, contorno=(35, 12, 0)):
+def texto_botao(conteudo, cor, largura_max, altura_max=34):
     """Texto legível para botões: usa o MAIOR tamanho que couber, em 1 linha
-    ou, se for longo, quebrado em 2 linhas. Tem contorno escuro."""
+    ou, se for longo, quebrado em 2 linhas. O meio da imagem é o meio do texto."""
     chave = (conteudo, cor, largura_max, altura_max)
     if chave in _cache_texto:
         return _cache_texto[chave]
 
     escolhido = None
-    for fonte in FONTES_BOTAO.values():  # do maior para o menor
-        passo = fonte.get_linesize()
-        for linhas in ([conteudo], _quebrar_em_duas(conteudo, fonte)):
+    for tam in (3, 2):  # do maior para o menor
+        passo = 10 * tam  # 7 da letra + 3 de vão
+        for linhas in ([conteudo], _quebrar_em_duas(conteudo, tam)):
             if not linhas:
                 continue
-            largura = max(fonte.size(l)[0] for l in linhas) + 2
-            altura = passo * len(linhas) + 2
+            largura = max(largura_texto(l, tam) for l in linhas)
+            # altura da letra com contorno (os acentos podem passar um pouco)
+            altura = (len(linhas) - 1) * passo + 9 * tam
             if largura <= largura_max and altura <= altura_max:
-                escolhido = (fonte, linhas)
+                escolhido = (tam, linhas)
                 break
         if escolhido:
             break
 
     if escolhido is None:  # nem o menor coube: usa o menor e encolhe a largura
-        fonte = list(FONTES_BOTAO.values())[-1]
-        escolhido = (fonte, [conteudo])
+        escolhido = (2, [conteudo])
 
-    fonte, linhas = escolhido
-    passo = fonte.get_linesize()
-    largura = max(fonte.size(l)[0] for l in linhas) + 2
-    img = pygame.Surface((largura, passo * len(linhas) + 2), pygame.SRCALPHA)
-
-    for n, linha in enumerate(linhas):
-        base = fonte.render(linha, SUAVIZAR_TEXTO, cor)
-        borda = fonte.render(linha, SUAVIZAR_TEXTO, contorno)
-        x = (largura - base.get_width()) // 2   # linhas centralizadas
-        y = n * passo
-        for dx in (0, 1, 2):
-            for dy in (0, 1, 2):
-                if (dx, dy) != (1, 1):
-                    img.blit(borda, (x + dx, y + dy))
-        img.blit(base, (x + 1, y + 1))
+    tam, linhas = escolhido
+    passo = 10 * tam
+    imgs = [escrita(l, tam, cor) for l in linhas]
+    largura = max(i.get_width() for i in imgs)
+    img = pygame.Surface((largura, imgs[0].get_height() + passo * (len(linhas) - 1)),
+                         pygame.SRCALPHA)
+    for n, i in enumerate(imgs):  # linhas centralizadas
+        img.blit(i, ((largura - i.get_width()) // 2, n * passo))
 
     if img.get_width() > largura_max:
-        redimensionar = pygame.transform.smoothscale if SUAVIZAR_TEXTO else pygame.transform.scale
-        img = redimensionar(img, (largura_max, img.get_height()))
+        img = pygame.transform.scale(img, (largura_max, img.get_height()))
 
     _cache_texto[chave] = img
     return img
 
 
-# Se existir assets/sprites/habilidades/<chave_da_habilidade>.png (por exemplo
-# picada_mortal.png), essa imagem é usada no lugar do botão gerado pelo código.
-_cache_botoes = {}
-
-
 # Cursor (seta para baixo) mostrado sobre quem está na vez e sobre o alvo
-# que está debaixo do mouse.
-cursor_turno = carregar('cursor.png').convert_alpha()
+# que está debaixo do mouse (a mesma imagem da tela de seleção).
+cursor_turno = cursor_vertical
 
 
 def desenhar_cursor(tela, centro_x, base_y):
@@ -406,27 +413,10 @@ def desenhar_cursor(tela, centro_x, base_y):
     tela.blit(cursor_turno, rect)
 
 
-def imagem_botao_habilidade(chave, tem_mana):
-    item = (chave, tem_mana)
-    if item not in _cache_botoes:
-        img = None
-        caminho = SPRITES / 'habilidades' / f'{chave}.png'
-        if caminho.exists():
-            img = pygame.transform.scale(
-                pygame.image.load(str(caminho)).convert_alpha(), TAM_BOTAO_HAB
-            )
-            if not tem_mana:
-                img = escurecer(img)
-        _cache_botoes[item] = img
-    return _cache_botoes[item]
-
-
-def texto(tela, conteudo, pos, fonte, cor=(255, 255, 255), centro=False):
-    sombra = fonte.render(conteudo, True, (0, 0, 0))
-    img = fonte.render(conteudo, True, cor)
-    rect = img.get_rect(center=pos) if centro else img.get_rect(topleft=pos)
-    tela.blit(sombra, rect.move(2, 2))
-    tela.blit(img, rect)
+def texto(tela, conteudo, centro, tam=TAM_NOME, cor=(255, 255, 255)):
+    """Escreve com o meio do texto em `centro`."""
+    img = escrita(conteudo, tam, cor)
+    tela.blit(img, img.get_rect(center=centro))
 
 
 def _desenhar_barra(tela, x, y, largura, valor, maximo, cor, cor_fundo, moldura):
@@ -447,11 +437,24 @@ def _desenhar_barra(tela, x, y, largura, valor, maximo, cor, cor_fundo, moldura)
         pygame.draw.rect(tela, (0, 0, 0), (x, y, largura, 14), 2)
         centro = (x + largura // 2, y + 7)
 
-    numeros = f'{valor}/{maximo}'
-    info = fonte_hp.render(numeros, True, (255, 255, 255))
-    sombra = fonte_hp.render(numeros, True, (0, 0, 0))
-    tela.blit(sombra, sombra.get_rect(center=(centro[0] + 1, centro[1] + 1)))
-    tela.blit(info, info.get_rect(center=centro))
+    info = texto_barra(f'{valor}/{maximo}', largura)
+    # (sem sombra, o meio da letra fica meio bloco abaixo do meio da imagem)
+    tela.blit(info, info.get_rect(center=(centro[0], centro[1] - 1)))
+
+
+_cache_barra = {}
+
+
+def texto_barra(conteudo, largura):
+    """Números das barras: fonte pixel tamanho TAM_HP reduzida para ESCALA_HP."""
+    chave = (conteudo, largura)
+    if chave not in _cache_barra:
+        img = escrita(conteudo, TAM_HP, sombra=0)
+        w = round(img.get_width() * ESCALA_HP)
+        h = round(img.get_height() * ESCALA_HP)
+        # número grande: encolhe mais para caber na barra
+        _cache_barra[chave] = pygame.transform.scale(img, (min(w, largura), h))
+    return _cache_barra[chave]
 
 
 def barra_vida(tela, x, y, largura, combatente, moldura=None):
@@ -503,6 +506,8 @@ class Batalha:
             p.remover_defesa()
             p.limpar_efeitos()  # escudos da luta anterior não passam de fase
             p.invocacao = None  # a torreta não passa de fase
+            if self.fase > 0:
+                p.descansar()   # recupera parte da vida/mana entre as fases
         limpar()
         self.zoom.limpar()
         self.zoom_quadro.limpar()
@@ -537,25 +542,22 @@ class Batalha:
         n = len(imgs)
 
         if n == 1:
-            pontos = [(1010, CHAO_INIMIGOS)]
+            pontos = [(1060, CHAO_INIMIGOS)]
         elif n == 2:
-            pontos = [(1110, CHAO_INIMIGOS), (880, CHAO_INIMIGOS)]
+            # em diagonal: um mais ao fundo (direita), outro mais à frente
+            pontos = [(1170, CHAO_FUNDO_INIMIGOS + 50), (970, CHAO_FRENTE_INIMIGOS - 35)]
         elif n == 3:
             fundo = max(range(3), key=lambda i: imgs[i].get_height())
             frente = [i for i in range(3) if i != fundo]
             pontos = [None] * 3
-            pontos[fundo] = (1030, CHAO_INIMIGOS - 105)
-            pontos[frente[0]] = (1190, CHAO_INIMIGOS + 5)
-            pontos[frente[1]] = (850, CHAO_INIMIGOS + 5)
+            pontos[fundo] = (1115, CHAO_FUNDO_INIMIGOS)
+            pontos[frente[0]] = (1185, CHAO_FRENTE_INIMIGOS)
+            pontos[frente[1]] = (950, CHAO_FRENTE_INIMIGOS)
         else:  # mais de 3: duas colunas, em várias fileiras
-            pontos = [(1110 - (i % 2) * 230, CHAO_INIMIGOS - (i // 2) * 150)
+            pontos = [(1170 - (i % 2) * 210, CHAO_FRENTE_INIMIGOS - (i // 2) * 150)
                       for i in range(n)]
 
         return [img.get_rect(midbottom=ponto) for img, ponto in zip(imgs, pontos)]
-
-    def rect_inimigo(self, i):
-        """Retângulo do sprite do inimigo i (pés no chão)."""
-        return self.rects_inimigos[i]
 
     def ordem_de_tras_para_frente(self):
         """Índices dos inimigos do fundo para a frente (quem está mais abaixo
@@ -666,6 +668,10 @@ class Batalha:
             self.habilidade_escolhida = chave
             self.modo = 'alvo_aliado'
 
+        elif tipo_alvo == 'protegido':  # qualquer aliado vivo
+            self.habilidade_escolhida = chave
+            self.modo = 'alvo_aliado'
+
         elif tipo_alvo == 'morto':
             if not any(p.vida <= 0 for p in self.grupo):
                 registrar('Nenhum aliado está derrotado!')
@@ -714,6 +720,8 @@ class Batalha:
             tipo = atual.HABILIDADES[self.habilidade_escolhida]['alvo']
             if tipo == 'morto':  # reviver: só derrotado
                 return aliado.vida <= 0
+            if tipo == 'protegido':  # escudo: qualquer aliado vivo
+                return aliado.vida > 0
             # cura: só vivo e ferido
             return aliado.vida > 0 and aliado.vida < aliado.vida_maxima
         return False
@@ -789,7 +797,6 @@ class Batalha:
                         self.luta.usar_pocao(chave, aliado, self.inventario)
                         usou = self.inventario[chave] < antes
                     else:
-                        atual = self.luta.combatente_atual()
                         mana_antes = atual.mana
                         tipo = atual.HABILIDADES[self.habilidade_escolhida]['alvo']
                         if not self.aliado_valido(aliado) and tipo != 'morto':
@@ -861,7 +868,10 @@ class Batalha:
         self.desenhar_inimigos(tela, mouse, atual)
         self.desenhar_personagens(tela, mouse, atual)
         self.desenhar_invocacoes(tela, atual)
-        self.desenhar_log(tela, atual)
+        # (na vitória, a tela semitransparente fica por cima: sem mensagens
+        # atrás do título)
+        if self.luta.resultado != 'vitoria':
+            self.desenhar_log(tela, atual)
         self.desenhar_menu(tela, mouse, atual)
 
         self.desenhar_numeros_dano(tela)
@@ -881,6 +891,9 @@ class Batalha:
             for n, valor in enumerate(combatente.danos_recentes):
                 self.numeros_dano.append(
                     [texto_dano(valor), rect.centerx, rect.y - acima - n * 26, agora])
+            # Um som só por combatente (o do maior golpe), para os ataques
+            # múltiplos não empilharem vários sons ao mesmo tempo.
+            tocar_dano(max(combatente.danos_recentes))
             combatente.danos_recentes.clear()
 
         t = agora - self.ultimo_dano.get(id(combatente), -10 ** 9)
@@ -932,8 +945,7 @@ class Batalha:
                 pygame.draw.rect(tela, (230, 50, 50), rect_sprite.inflate(14, 14), 3)
 
             # Nome logo abaixo do sprite, depois a barra de vida e a de mana
-            texto(tela, p.nome, (rect.centerx, rect.bottom + 14),
-                  fonte_nome, centro=True)
+            texto(tela, p.nome, (rect.centerx, rect.bottom + 14))
             y_vida = rect.bottom + 28
             barra_vida(tela, rect.x, y_vida, rect.width, p, moldura_barra)
             barra_mana(tela, rect.x, y_vida + ALTURA_BARRA + 2, rect.width,
@@ -969,8 +981,7 @@ class Batalha:
                 continue  # destruída: some da tela
 
             tela.blit(img, rect_sprite)
-            texto(tela, inv.nome, (rect.centerx, rect.bottom + 14),
-                  fonte_nome, centro=True)
+            texto(tela, inv.nome, (rect.centerx, rect.bottom + 14))
             barra_vida(tela, rect.x, rect.bottom + 28, rect.width, inv,
                        moldura_invocacao)
 
@@ -985,7 +996,7 @@ class Batalha:
             if inimigo not in self.luta.grupo_inimigos:
                 continue  # fugiu
 
-            rect = self.rect_inimigo(i)
+            rect = self.rects_inimigos[i]
             vivo = inimigo.vida > 0
             normal, morto = imagem_inimigo(inimigo.chave)
 
@@ -998,12 +1009,13 @@ class Batalha:
 
             # Nome sobre a cabeça, sprite, barra de vida embaixo dos pés
             nome = inimigo.nome + (' (DEF)' if inimigo.defendendo else '')
-            meia = fonte_nome.size(nome)[0] // 2 + 6  # nome longo não sai da tela
+            meia = largura_texto(nome, TAM_NOME) // 2 + 6  # nome longo não sai da tela
             cx = min(max(rect.centerx, meia), LARGURA - meia)
-            texto(tela, nome, (cx, rect_sprite.y - 14), fonte_nome, centro=True)
+            texto(tela, nome, (cx, rect_sprite.y - 14))
             tela.blit(img, rect_sprite)
+            moldura = moldura_chefe if inimigo.chave in CHEFES else moldura_inimigo
             barra_vida(tela, rect.centerx - TAM_INIMIGO // 2, rect.bottom + 4,
-                       TAM_INIMIGO, inimigo)
+                       TAM_INIMIGO, inimigo, moldura)
 
             # Cursor sobre quem está na vez e sobre o alvo debaixo do mouse
             # (acima do nome)
@@ -1047,14 +1059,17 @@ class Batalha:
             linhas = [(m, (235, 235, 235)) for m in mensagens[-3:]]
 
         # Tudo que é escrito fica recortado dentro da moldura
-        tela.set_clip(AREA_TEXTO)
+        # (4 px de folga em cima/embaixo para os acentos)
+        tela.set_clip(AREA_TEXTO.inflate(0, 8))
         for n, (msg, cor) in enumerate(linhas):
-            img = fonte_log.render(msg, True, cor)
-            if img.get_width() > AREA_TEXTO.width:
-                img = pygame.transform.smoothscale(
+            img = escrita(msg, TAM_LOG, cor)
+            if img.get_width() > AREA_TEXTO.width:  # mensagem longa: encolhe
+                img = pygame.transform.scale(
                     img, (AREA_TEXTO.width, img.get_height())
                 )
-            tela.blit(img, (AREA_TEXTO.x, AREA_TEXTO.y + n * 21))
+            # meio da letra de cada linha
+            meio_y = AREA_TEXTO.y + 12 + n * ESPACO_LOG
+            tela.blit(img, img.get_rect(midleft=(AREA_TEXTO.x - TAM_LOG, meio_y)))
         tela.set_clip(None)
 
     def botao_escolhido(self):
@@ -1082,17 +1097,12 @@ class Batalha:
             if fator != 1.0:
                 tela.blit(img, rect_img)
 
-        if vez:
-            if self.modo in ('habilidades', 'itens'):
-                self.desenhar_quadro(tela, mouse, atual)
-            else:
-                self.zoom_quadro.limpar()
+        if vez and self.modo in ('habilidades', 'itens'):
+            self.desenhar_quadro(tela, mouse, atual)
         else:
             self.zoom_quadro.limpar()
-            # Menu apagado durante o turno dos inimigos
-            sombra = pygame.Surface(CAIXA_MENU.size, pygame.SRCALPHA)
-            sombra.fill((0, 0, 0, 150))
-            tela.blit(sombra, CAIXA_MENU)
+            if not vez:  # menu apagado durante o turno dos inimigos
+                tela.blit(sombra_menu, CAIXA_MENU)
 
     def desenhar_quadro(self, tela, mouse, atual):
         if self.modo == 'itens':
@@ -1108,10 +1118,10 @@ class Batalha:
             img, rect_img = ampliar(
                 self.superficie_botao_quadro(rect, tipo, dados, atual), rect, fator
             )
-            desenhos.append((fator, sobre, img, rect_img))
+            desenhos.append((fator, img, rect_img))
 
         # os ampliados por último, para ficarem por cima dos vizinhos
-        for fator, sobre, img, rect_img in sorted(desenhos, key=lambda d: d[0]):
+        for _, img, rect_img in sorted(desenhos, key=lambda d: d[0]):
             tela.blit(img, rect_img)
 
     def superficie_botao_quadro(self, rect, tipo, dados, atual):
@@ -1147,58 +1157,70 @@ class Batalha:
         else:
             chave, nome, custo, _ = dados
             tem_mana = atual.tem_mana(chave)
-            personalizada = imagem_botao_habilidade(chave, tem_mana)
-
-            if personalizada:
-                sup.blit(personalizada, (0, 0))
-            else:
-                sup.blit(normal if tem_mana else apagado, (0, 0))
-                cor_nome = (255, 200, 50) if tem_mana else (150, 150, 150)
-                cor_custo = (120, 205, 255) if tem_mana else (230, 90, 80)
-                # nome à esquerda, custo de mana à direita
-                img = texto_botao(nome, cor_nome, larg_nome, alt_texto)
-                sup.blit(img, img.get_rect(center=(x_nome, centro_y)))
-                img = texto_botao(str(custo), cor_custo, larg_num, 30)
-                sup.blit(img, img.get_rect(center=(x_num, centro_y)))
+            sup.blit(normal if tem_mana else apagado, (0, 0))
+            cor_nome = (255, 200, 50) if tem_mana else (150, 150, 150)
+            cor_custo = (120, 205, 255) if tem_mana else (230, 90, 80)
+            # nome à esquerda, custo de mana à direita
+            img = texto_botao(nome, cor_nome, larg_nome, alt_texto)
+            sup.blit(img, img.get_rect(center=(x_nome, centro_y)))
+            img = texto_botao(str(custo), cor_custo, larg_num, 30)
+            sup.blit(img, img.get_rect(center=(x_num, centro_y)))
 
         return sup
 
     def desenhar_fim(self, tela):
-        escuro = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
-        escuro.fill((0, 0, 0, 170))
-        tela.blit(escuro, (0, 0))
-        meio = LARGURA // 2
-
         if self.luta.resultado == 'vitoria':
-            ultima = self.fase + 1 >= len(FASES)
-            titulo = 'VOCÊ VENCEU!' if ultima else 'VITÓRIA!'
-            sub = 'Clique para voltar ao menu' if ultima else 'Clique para a próxima fase'
-            texto(tela, titulo, (meio, 140), fonte_grande, (255, 220, 40), centro=True)
-
-            if ultima:
-                n = progresso.zeradas()
-                texto(tela, f'Jogo zerado {n} {"vez" if n == 1 else "vezes"}!',
-                      (meio, 250), fonte_info, centro=True)
-                if self.novo_personagem is not None:
-                    novo = todos_personagens[self.novo_personagem]
-                    texto(tela, 'Personagem desbloqueado:', (meio, 310),
-                          fonte_info, centro=True)
-                    texto(tela, f'{novo.nome} ({novo.CLASSE})', (meio, 352),
-                          fonte_info, (120, 230, 140), centro=True)
+            if self.fase + 1 >= len(FASES):
+                self.desenhar_vitoria_final(tela)
             else:
-                y = 235
-                if self.drops:
-                    texto(tela, 'Você conseguiu:', (meio, y), fonte_info, centro=True)
-                    for chave, qtd in self.drops.items():
-                        y += 38
-                        texto(tela, f'{qtd}x {itens.nome_pocao(chave)}', (meio, y),
-                              fonte_info, (120, 230, 140), centro=True)
-                else:
-                    texto(tela, 'Nenhuma poção desta vez...', (meio, y),
-                          fonte_info, (200, 200, 200), centro=True)
+                self.desenhar_vitoria_fase(tela)
+            return
 
-            # acima da caixa de menu do fundo (que começa em y = 529)
-            texto(tela, sub, (meio, 390 if ultima else 505), fonte_info, centro=True)
+        meio = LARGURA // 2
+        tela.blit(escuro_fim, (0, 0))
+        fp.escrever(tela, 'DERROTA...', (meio, 290), k=3, cores=fp.VERMELHO)
+        fp.escrever(tela, 'CLIQUE PARA VOLTAR AO MENU', (meio, 420), cores=fp.BRANCO)
+
+    def desenhar_vitoria_fase(self, tela):
+        """vitoria_fase.png + as poções ganhas dentro do quadro
+        (entre as duas linhas douradas: y de ~300 a ~500)."""
+        meio = LARGURA // 2
+        tela.blit(tela_vitoria_fase, (0, 0))
+
+        if not self.drops:
+            fp.escrever(tela, 'NENHUMA POÇÃO DESTA VEZ...', (meio, 400),
+                        cores=fp.BRANCO, tam_bloco=3)
+            return
+
+        fp.escrever(tela, 'VOCÊ CONSEGUIU:', (meio, 332), cores=fp.DOURADO)
+        linhas = [f'{qtd}X {itens.nome_pocao(chave)}' for chave, qtd in self.drops.items()]
+        if len(linhas) <= 4:  # uma coluna
+            for n, linha in enumerate(linhas):
+                fp.escrever(tela, linha, (meio, 378 + n * 34),
+                            cores=fp.VERDE, tam_bloco=3)
+        else:                 # muitas poções: duas colunas, letra menor
+            por_coluna = (len(linhas) + 1) // 2
+            for n, linha in enumerate(linhas):
+                coluna, lin = divmod(n, por_coluna)
+                fp.escrever(tela, linha, (meio - 240 + coluna * 270, 372 + lin * 28),
+                            cores=fp.VERDE, tam_bloco=2, alinhar='esquerda')
+
+    def desenhar_vitoria_final(self, tela):
+        """vitoria_final.png + quantas vezes zerou e quem foi desbloqueado
+        (no quadro abaixo do troféu: y de ~430 a ~580)."""
+        meio = LARGURA // 2
+        tela.blit(tela_vitoria_final, (0, 0))
+
+        n = progresso.zeradas()
+        linhas = [(f'JOGO ZERADO {n} {"VEZ" if n == 1 else "VEZES"}!', fp.DOURADO)]
+        if self.novo_personagem is not None:
+            novo = todos_personagens[self.novo_personagem]
+            linhas.append(('PERSONAGEM DESBLOQUEADO:', fp.BRANCO))
+            linhas.append((f'{novo.nome} ({novo.CLASSE})', fp.VERDE))
         else:
-            texto(tela, 'DERROTA...', (meio, 290), fonte_grande, (230, 70, 60), centro=True)
-            texto(tela, 'Clique para voltar ao menu', (meio, 390), fonte_info, centro=True)
+            linhas.append(('OBRIGADO POR JOGAR!', fp.CIANO))
+
+        espaco = 38
+        y0 = 504 - (len(linhas) - 1) * espaco // 2   # centralizado no quadro
+        for k, (linha, cores) in enumerate(linhas):
+            fp.escrever(tela, linha, (meio, y0 + k * espaco), cores=cores, tam_bloco=3)

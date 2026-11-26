@@ -1,6 +1,19 @@
 from .registro import registrar
 
 
+def causar_dano(alvo, dano, mensagem):
+    """Tira `dano` de vida do alvo, registra a mensagem, quebra a defesa dele
+    e avisa se ele foi derrotado."""
+    alvo.vida = max(0, alvo.vida - dano)
+    registrar(mensagem)
+
+    if alvo.defendendo:
+        alvo.remover_defesa()
+
+    if alvo.vida == 0:
+        registrar(f'{alvo.nome} foi derrotado!')
+
+
 class Combatente:
     def __init__(self, nome, vida_maxima, vida, ataque, defesa, velocidade):
         self.nome = nome
@@ -40,15 +53,8 @@ class Combatente:
             return 0
 
         dano_real = max(1, self.ataque - alvo.defesa)
-        alvo.vida = max(0, alvo.vida - dano_real)
-        registrar(f'{self.nome} atacou {alvo.nome}: {dano_real} de dano!')
-
-        if alvo.defendendo:
-            alvo.remover_defesa()
-
-        if alvo.vida == 0:
-            registrar(f'{alvo.nome} foi derrotado!')
-
+        causar_dano(alvo, dano_real,
+                    f'{self.nome} atacou {alvo.nome}: {dano_real} de dano!')
         return dano_real
 
     def defender(self):
@@ -76,6 +82,8 @@ class Combatente:
 
         if atributo == 'defesa' and delta < 0:
             delta = -min(self.defesa, -delta)  # a defesa nunca fica negativa
+        if atributo == 'ataque' and delta < 0:
+            delta = -min(self.ataque - 1, -delta)  # o ataque fica no mínimo 1
 
         setattr(self, atributo, getattr(self, atributo) + delta)
         self.efeitos.append({

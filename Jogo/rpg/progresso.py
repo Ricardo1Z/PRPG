@@ -12,6 +12,10 @@ ARQUIVO = Path(__file__).resolve().parent.parent / 'save.json'
 TOTAL_PERSONAGENS = 8
 BASICOS = 4  # personagens já liberados no começo
 
+# Modo demonstração: todos os personagens já começam liberados.
+# Mude para False para voltar ao desbloqueio normal (por zeradas).
+MODO_DEMO = True
+
 
 def _ler():
     try:
@@ -37,6 +41,8 @@ def zeradas():
 
 def quantos_liberados():
     """Quantos personagens estão liberados (os da frente da lista)."""
+    if MODO_DEMO:
+        return TOTAL_PERSONAGENS
     return min(TOTAL_PERSONAGENS, BASICOS + _zeradas)
 
 

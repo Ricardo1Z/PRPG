@@ -5,6 +5,7 @@ Para criar um item novo, basta acrescentar uma linha em POCOES.
 """
 import random
 
+from .combatentes import causar_dano
 from .registro import registrar
 
 # chave -> nome, tipo ('hp' cura vida / 'mp' recupera mana / 'revive'), quanto
@@ -126,26 +127,15 @@ def usar_item_de_dano(chave, usuario, alvos, inventario):
     if item['tipo'] == 'bomba':
         registrar(f'{usuario.nome} jogou uma {item["nome"]}!')
         for alvo in alvos:
-            _causar_dano(alvo, max(1, item['valor'] - alvo.defesa // 2),
-                         '{alvo} recebeu {dano} de dano!')
+            dano = max(1, item['valor'] - alvo.defesa // 2)
+            causar_dano(alvo, dano, f'{alvo.nome} recebeu {dano} de dano!')
     else:
         alvo = alvos[0]
-        _causar_dano(alvo, max(1, item['valor'] - alvo.defesa),
-                     f'{usuario.nome} usou {item["nome"]}: '
-                     '{dano} de dano em {alvo}!')
+        dano = max(1, item['valor'] - alvo.defesa)
+        causar_dano(alvo, dano, f'{usuario.nome} usou {item["nome"]}: '
+                                f'{dano} de dano em {alvo.nome}!')
 
     return True
-
-
-def _causar_dano(alvo, dano, mensagem):
-    alvo.vida = max(0, alvo.vida - dano)
-    registrar(mensagem.format(alvo=alvo.nome, dano=dano))
-
-    if alvo.defendendo:
-        alvo.remover_defesa()
-
-    if alvo.vida == 0:
-        registrar(f'{alvo.nome} foi derrotado!')
 
 
 def sortear_drops(indice_fase, sorte=random):

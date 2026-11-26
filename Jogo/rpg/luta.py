@@ -3,16 +3,16 @@ import random
 from .registro import registrar
 from . import itens
 
+ESPERA_ACAO = 45  # quadros de espera antes de inimigos/invocações agirem
+
 
 class Luta:
     def __init__(self, grupo_jogador, grupo_inimigos):
         self.grupo_jogador = grupo_jogador
         self.grupo_inimigos = grupo_inimigos
 
-        self.participantes = grupo_jogador + grupo_inimigos
-
         self.ordem_turnos = sorted(
-            self.participantes,
+            grupo_jogador + grupo_inimigos,
             key=lambda c: c.velocidade,
             reverse=True
         )
@@ -34,12 +34,8 @@ class Luta:
             self.avancar_turno()
 
     def combatente_atual(self):
-        if self.resultado:
+        if self.resultado or not self.ordem_turnos:
             return None
-
-        if not self.ordem_turnos:
-            return None
-
         return self.ordem_turnos[self.indice_turno]
 
     def verificar_fim(self):
@@ -161,7 +157,7 @@ class Luta:
         if combatente in self.invocacoes:
             # Invocação: espera um pouco e ataca um inimigo vivo aleatório
             self.tempo_inimigo += 1
-            if self.tempo_inimigo >= 45:
+            if self.tempo_inimigo >= ESPERA_ACAO:
                 self.tempo_inimigo = 0
                 alvos = [i for i in self.grupo_inimigos if i.vida > 0]
                 if alvos:
@@ -172,7 +168,7 @@ class Luta:
             self.tempo_inimigo += 1
 
             # Espera um pouco antes da ação do inimigo
-            if self.tempo_inimigo >= 45:
+            if self.tempo_inimigo >= ESPERA_ACAO:
                 self.tempo_inimigo = 0
 
                 acao = combatente.escolher_acao()
