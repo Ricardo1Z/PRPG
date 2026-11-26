@@ -13,7 +13,6 @@ from .registro import mensagens, limpar, registrar
 from .musica import tocar_dano
 
 # Cada item é uma luta; ao vencer, passa para a próxima.
-# Use as chaves do dicionário INIMIGOS (inimigos.py).
 FASES = [
     ['slime', 'inseto'],                       # 1
     ['slime', 'aranha'],                       # 2
@@ -40,25 +39,23 @@ BOTOES_ACAO = {
     'itens': pygame.Rect(650, 622, 198, 52),
 }
 CAIXA_MENU = pygame.Rect(404, 529, 472, 166)
-PAINEL_LOG = pygame.Rect(300, 6, 640, 140)           # tamanho de mensagens.png
-AREA_TEXTO = pygame.Rect(334, 44, 572, 64)           # parte de dentro da moldura (3 linhas)
+PAINEL_LOG = pygame.Rect(300, 6, 640, 140)           # tamanho de caixa de mensagens 
+AREA_TEXTO = pygame.Rect(334, 44, 572, 64)           
 
 # Quadro de habilidades (quadro_habilidades.png): aparece logo ACIMA da caixa
 # de menu, com um botão para cada habilidade e um VOLTAR no fim.
 ALTURA_QUADRO = 370
-LARGURA_QUADRO = 290           # a moldura é esticada sem distorcer os cantos
-BORDA_QUADRO = 32              # px da moldura (cantos) em quadro_habilidades.png
-# parte de dentro da moldura, em fração do quadro: (esquerda, cima, direita, baixo)
-INTERIOR_QUADRO = (0.12, 0.09, 0.88, 0.92)
-TAM_BOTAO_HAB = (212, 60)      # tamanho dos botões dentro do quadro (= tamanho do PNG)
-ALTURA_BOTAO_ITEM = 34         # botões dos itens são mais baixos
+LARGURA_QUADRO = 290          
+BORDA_QUADRO = 32              
 
-# Quadro de itens: mesma moldura, mas com os botões em 2 colunas
-# (5 linhas cada: 9 itens + VOLTAR no fim da 2ª coluna).
+INTERIOR_QUADRO = (0.12, 0.09, 0.88, 0.92)
+TAM_BOTAO_HAB = (212, 60)      
+ALTURA_BOTAO_ITEM = 34         
+
 COLUNAS_ITENS = 2
 LINHAS_ITENS = 5
-ESPACO_ITENS = 10              # px entre os botões dos itens
-# margens (px) da parte de dentro da moldura: esquerda, cima, direita, baixo
+ESPACO_ITENS = 10              
+
 MARGENS_QUADRO = (35, 33, 35, 30)
 LARGURA_QUADRO_ITENS = (MARGENS_QUADRO[0] + MARGENS_QUADRO[2]
                         + COLUNAS_ITENS * TAM_BOTAO_HAB[0] + (COLUNAS_ITENS - 1) * 14)
@@ -67,11 +64,8 @@ ALTURA_QUADRO_ITENS = (MARGENS_QUADRO[1] + MARGENS_QUADRO[3]
                        + (LINHAS_ITENS + 1) * ESPACO_ITENS)
 
 TAM_PERSONAGEM = 96
-TAM_INIMIGO = 120  # só para o placeholder (usado se o sprite do inimigo não existir)
+TAM_INIMIGO = 120  
 
-# ---------- sprites dos inimigos ----------
-# Procurados em assets/sprites/inimigos/.
-# chave do inimigo (INIMIGOS em inimigos.py) -> nome do arquivo
 ARQUIVOS_INIMIGOS = {
     'slime': 'slime.png',
     'inseto': 'inseto.png',
@@ -85,8 +79,6 @@ ARQUIVOS_INIMIGOS = {
     'bug_original': 'bug_original.png',
 }
 
-# Altura (em pixels NA TELA) de cada inimigo; a largura acompanha o sprite.
-# Os chefes ficam maiores que os inimigos comuns.
 ALTURA_INIMIGO = {
     'slime': 76, 'goblin': 82, 'inseto': 72, 'aranha': 96, 'doppelganger': 90,
     'golem': 128, 'virus': 146, 'dragao': 226, 'compilador': 218,
@@ -94,31 +86,17 @@ ALTURA_INIMIGO = {
 }
 ALTURA_PADRAO_INIMIGO = 120
 
-# Se preferir um aumento fixo e inteiro (pixel-art sempre nítida), coloque
-# aqui um número (ex.: 3): todo sprite fica "tamanho do arquivo x 3" e a
-# tabela de alturas acima é ignorada.
 ESCALA_INIMIGOS = None
 
-# Posição dos inimigos: "chão" (onde ficam os pés). O chão dos cenários
-# começa por volta de y = 455; quanto mais para baixo, mais "perto" da tela.
-# Com 3 inimigos, o maior fica ao fundo, no centro, e os outros dois na
-# frente, nas laterais. Todos ficam à direita de x = 876 (caixa do menu).
-CHAO_INIMIGOS = 590         # 1 inimigo
-CHAO_FUNDO_INIMIGOS = 470   # quem está mais ao fundo (logo depois da borda do chão)
-CHAO_FRENTE_INIMIGOS = 650  # quem está mais à frente
+CHAO_INIMIGOS = 590        
+CHAO_FUNDO_INIMIGOS = 470   
+CHAO_FRENTE_INIMIGOS = 650  
 
-# Formação do grupo: 2 linhas x 2 colunas.
-# A linha de cima (1º e 2º escolhidos) fica NA FRENTE (mais perto dos
-# inimigos); a de baixo fica atrás, recuada para a esquerda.
-# DESLOC_TRAS = 0 alinha tudo em uma grade reta.
-# O chão dos 3 cenários começa por volta de y = 445-455: os pés da linha de cima
-# (y + 96) ficam logo abaixo disso, para ninguém parecer flutuar.
-LINHAS_Y = (372, 545)   # y do sprite de cada linha (cabem nome + vida + mana)
-X_FRENTE = 170          # x do 1º personagem da linha da frente
-ESPACO_X = 125          # distância horizontal entre os dois da linha
-DESLOC_TRAS = 80        # quanto a linha de trás recua para a esquerda
+LINHAS_Y = (372, 545)  
+X_FRENTE = 170       
+ESPACO_X = 125          
+DESLOC_TRAS = 80        
 
-# Invocações (Torreta): ficam à frente do time, na altura da linha da frente
 X_INVOCACAO = X_FRENTE + 2 * ESPACO_X
 TAM_INVOCACAO = 80
 
@@ -149,28 +127,22 @@ def nove_fatias(img, largura, altura, borda):
     s.blit(pygame.transform.scale(img.subsurface((iw - b, b, b, ih - 2 * b)), (b, vert)), (largura - b, b))
     return s
 
-
-# Um fundo a cada 5 fases (batalha1.png, batalha2.png, batalha3.png)
 fundos_batalha = {
     n: pygame.transform.scale(carregar(f'batalha{n}.png', TELAS).convert(),
                               (LARGURA, ALTURA))
     for n in (1, 2, 3)
 }
 
-# Os botões de ação fazem parte do fundo: recorta cada um para poder ampliá-lo
 img_botoes_acao = {nome: fundos_batalha[1].subsurface(rect).copy()
                    for nome, rect in BOTOES_ACAO.items()}
 img_mensagens = carregar('mensagens.png').convert_alpha()
 
-# contorno.png tem 4 px de borda; esticado para a largura do sprite.
-# A mesma moldura é usada nas barras de vida e de mana.
 BORDA_BARRA = 4
 ALTURA_BARRA = 22
 _contorno = carregar('contorno.png').convert_alpha()
 moldura_barra = nove_fatias(_contorno, TAM_PERSONAGEM, ALTURA_BARRA, BORDA_BARRA)
 moldura_invocacao = nove_fatias(_contorno, TAM_INVOCACAO, ALTURA_BARRA, BORDA_BARRA)
-# Inimigos usam a moldura vermelha; chefes, a moldura própria (borda direita
-# mais grossa, por isso a fatia de 8 px para não deformar o canto).
+
 CHEFES = {'dragao', 'compilador', 'bug_original'}
 moldura_inimigo = nove_fatias(
     carregar('contorno_inimigo.png').convert_alpha(),
@@ -180,21 +152,19 @@ moldura_chefe = nove_fatias(
     carregar('contorno_boss.png').convert_alpha(),
     TAM_INIMIGO, ALTURA_BARRA, 8
 )
-# Telas de fim de luta: vitoria_fase.png é semitransparente (fica por cima
-# da batalha); vitoria_final.png ocupa a tela inteira.
+
 tela_vitoria_fase = pygame.transform.scale(
     carregar('vitoria_fase.png', TELAS).convert_alpha(), (LARGURA, ALTURA))
 tela_vitoria_final = pygame.transform.scale(
     carregar('vitoria_final.png', TELAS).convert(), (LARGURA, ALTURA))
 
-# ---------- texto (fonte pixel: rpg/fonte_pixel.py) ----------
 # Tamanho do "pixel" da letra: 2 -> letras de 14 px, 3 -> 21 px, 4 -> 28 px.
 TAM_NOME = 2
 TAM_HP = 2
 ESCALA_HP = 0.75      # números das barras um pouco menores (letras de ~10 px)
 TAM_LOG = 2
 TAM_DANO = 3
-ESPACO_LOG = 20       # px entre as linhas do painel de mensagens
+ESPACO_LOG = 20 
 
 
 def _cores(cor):
@@ -216,8 +186,6 @@ def largura_texto(conteudo, tam):
     """Largura (px) que o texto vai ter, sem precisar desenhá-lo."""
     return (len(fp.mascara(conteudo)[0]) + 2) * tam
 
-
-# Camadas escuras semitransparentes (criadas uma vez, não a cada quadro)
 sombra_menu = pygame.Surface(CAIXA_MENU.size, pygame.SRCALPHA)
 sombra_menu.fill((0, 0, 0, 150))
 escuro_fim = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
@@ -285,8 +253,6 @@ def recortar_linhas(img, trechos):
     return novo
 
 
-# 54 -> 34 px: tira 10 linhas da faixa azul-esverdeada e 10 da azul-escura
-# (faixas de cor constante), então o botão não fica distorcido.
 _botao_54 = pygame.transform.scale(_botao_habilidade, (TAM_BOTAO_HAB[0], 54))
 botao_item = recortar_linhas(_botao_54, [(0, 16), (26, 29), (39, 54)])
 botao_item_apagado = escurecer(botao_item)
@@ -299,7 +265,7 @@ def carregar_quadro(largura=LARGURA_QUADRO, altura=ALTURA_QUADRO):
         b = BORDA_QUADRO
         w, h = img.get_size()
         quadro = pygame.Surface((largura, altura), pygame.SRCALPHA)
-        # miolo (nove_fatias só desenha as bordas)
+        
         miolo = img.subsurface((b, b, w - 2 * b, h - 2 * b))
         quadro.blit(pygame.transform.scale(
             miolo, (largura - 2 * b, altura - 2 * b)), (b, b))
@@ -325,7 +291,6 @@ RECT_QUADRO_ITENS = quadro_itens.get_rect(
 _cache_texto = {}
 
 
-# ---------- efeitos de dano ----------
 # Quem leva dano pisca em branco, dá um "pulo" de tamanho (como o hover) e
 # solta um número vermelho (ex.: -4) que sobe e some.
 DURACAO_PISCADA = 250        # ms do brilho branco

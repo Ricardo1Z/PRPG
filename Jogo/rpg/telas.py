@@ -13,7 +13,6 @@ LARGURA = 1280
 ALTURA = 720
 tela = pygame.display.set_mode((LARGURA, ALTURA))
 
-# jogo/assets/sprites (a pasta rpg/ fica ao lado de assets/)
 SPRITES = Path(__file__).resolve().parent.parent / 'assets' / 'sprites'
 # subpastas de assets/sprites
 INIMIGOS = SPRITES / 'inimigos'        # sprites dos inimigos (+ placeholder)
@@ -26,7 +25,7 @@ def carregar(nome, pasta=INTERFACE):
     return pygame.image.load(str(pasta / nome))
 
 
-# ---------- ampliação suave (hover) ----------
+# hover
 ESCALA_HOVER_MENU = 1.04      # botões do menu / VOLTAR / confirmar
 ESCALA_HOVER_SLOT = 1.02      # espaços da tela de seleção
 VELOCIDADE_ZOOM = 0.25         # 0..1: quanto anda em direção ao tamanho final por quadro
@@ -65,7 +64,7 @@ zoom_telas = Zoom()
 
 
 def destacar(tela, chave, rect, sobre, alvo=ESCALA_HOVER_MENU):
-    """Recorta o que já está desenhado em `rect` e desenha ampliado por cima
+    """Recorta o que já está desenhado em 'rect' e desenha ampliado por cima
     quando o mouse está em cima. Devolve o rect (ampliado ou não)."""
     fator = zoom_telas.escala(chave, sobre, alvo)
     if fator == 1.0:
@@ -123,22 +122,21 @@ botao_jogar = pygame.Rect(
     ALTURA - 2 - botao_confirmar.get_height(),
     *botao_confirmar.get_size()
 )
-# Botão VOLTAR: mesmo tamanho do JOGAR, espelhado no canto inferior esquerdo
+# Botão VOLTAR
 botao_voltar = pygame.Rect(
     10, ALTURA - 2 - botao_voltar_img.get_height(), *botao_voltar_img.get_size()
 )
 botao_confirmar_apagado = botao_confirmar.copy()
 botao_confirmar_apagado.fill((110, 110, 110, 255), special_flags=pygame.BLEND_RGBA_MULT)
 
-# Contador "N/4" feito com as imagens grupo1..grupo4 e grupo (a barra "/").
-# As imagens já vêm no tamanho certo (pixel art).
+# Contador "N/4"
 numeros = {n: carregar(f'grupo{n}.png').convert_alpha() for n in (1, 2, 3, 4)}
 barra_contador = carregar('grupo.png').convert_alpha()
 
 # Os personagens liberados são desenhados pelo código dentro dos espaços.
 # Nos espaços de baixo a arte tem o "?" e o aviso "ZERE O JOGO N VEZES": ao
 # liberar, o espaço é coberto com o espaço vazio de cima (mesma arte, sem "?").
-INTERIOR_SLOT = (16, 16, 188, 188)  # miolo do espaço (x, y, larg., alt.)
+INTERIOR_SLOT = (16, 16, 188, 188)
 TAM_SPRITE_SLOT = 176
 COLUNAS_SELECAO = 4
 _cache_sprites_slot = {}
@@ -210,7 +208,7 @@ def tela_selecao(tela, mouse, selecionados):
     destacar(tela, ('selecao', 'voltar'), botao_voltar,
              botao_voltar.collidepoint(mouse))
 
-    # Botão de confirmar: só fica "aceso" com 4 personagens escolhidos
+    # Botão de confirmar: só fica aceso com 4 os personagens escolhidos
     pronto = len(selecionados) == 4
     tela.blit(botao_confirmar if pronto else botao_confirmar_apagado, botao_jogar)
     destacar(tela, ('selecao', 'confirmar'), botao_jogar,
@@ -219,16 +217,13 @@ def tela_selecao(tela, mouse, selecionados):
     desenhar_contador(tela, len(selecionados))
 
 
-# ---------- tela de opções (volumes) ----------
-# Medidas tiradas de tela_opcoes.png (1280x720). A arte já traz as barras em
-# 80/60/70%; o código apaga o preenchimento, o "%" e a seta e redesenha
-# conforme os volumes atuais.
+# tela de opções (volumes) 
 OPCOES = ['geral', 'musica', 'efeitos']
-DY_OPCAO = 120                       # distância entre uma opção e a próxima
+DY_OPCAO = 120                       
 COR_FUNDO_PAINEL = (14, 26, 58)
 COR_SEGMENTO_VAZIO = (18, 30, 62)
 COR_SEPARADOR = (8, 16, 40)
-# (claro, médio, escuro) do preenchimento: laranja no geral, azul nos outros
+
 CORES_BARRA = {
     'geral': ((255, 214, 110), (255, 150, 30), (210, 80, 16)),
     'musica': ((190, 246, 255), (60, 196, 230), (24, 120, 180)),
@@ -237,27 +232,24 @@ CORES_BARRA = {
 CORES_PORCENTO = {'geral': (255, 200, 70), 'musica': (120, 210, 240),
                   'efeitos': (120, 210, 240)}
 
-# primeira opção (as outras ficam DY_OPCAO abaixo)
-X_PREENCHE, Y_PREENCHE = 336, 308    # área colorida da barra
+X_PREENCHE, Y_PREENCHE = 336, 308 
 LARG_PREENCHE, ALT_PREENCHE = 572, 12
-SEPARADORES = [388, 448, 504, 564, 620, 676, 736, 792, 852]  # x, 4 px cada
-RECT_BARRA = pygame.Rect(320, 292, 600, 44)    # barra inteira (para limpar/clicar)
+SEPARADORES = [388, 448, 504, 564, 620, 676, 736, 792, 852]  
+RECT_BARRA = pygame.Rect(320, 292, 600, 44)  
 RECT_PORCENTO = pygame.Rect(896, 248, 104, 56)
 RECT_SETA = pygame.Rect(266, 248, 32, 48)
-RECT_PINO = pygame.Rect(784, 296, 12, 40)      # pino da barra (em 80%)
-COLUNA_LIMPA_X = 850                           # coluna da barra sem pino
+RECT_PINO = pygame.Rect(784, 296, 12, 40) 
+COLUNA_LIMPA_X = 850                           
 PASSO_TECLADO = 5
 
 pino = opcoes.subsurface(RECT_PINO).copy()
 seta_opcao = opcoes.subsurface(RECT_SETA).copy()
 
-# Barra "limpa": a arte da barra com a coluna do pino trocada por uma coluna vazia
 barra_limpa = opcoes.subsurface(RECT_BARRA).copy()
 _coluna = opcoes.subsurface((COLUNA_LIMPA_X, RECT_BARRA.y, 1, RECT_BARRA.height))
 for _x in range(RECT_PINO.left - RECT_BARRA.x, RECT_PINO.right - RECT_BARRA.x):
     barra_limpa.blit(_coluna, (_x, 0))
 
-# Fundo da tela de opções sem seta, sem "%" e sem barras preenchidas
 opcoes_base = opcoes.copy()
 for _k in range(len(OPCOES)):
     _dy = _k * DY_OPCAO

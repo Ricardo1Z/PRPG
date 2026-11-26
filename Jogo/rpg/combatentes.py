@@ -18,13 +18,13 @@ class Combatente:
     def __init__(self, nome, vida_maxima, vida, ataque, defesa, velocidade):
         self.nome = nome
         self.vida_maxima = vida_maxima
-        self.danos_recentes = []  # danos ainda não mostrados na tela (ver vida.setter)
+        self.danos_recentes = []  # danos ainda não mostrados na tela
         self._vida = vida
         self.ataque = ataque
         self.defesa = defesa
         self.velocidade = velocidade
         self.defendendo = False
-        self.efeitos = []  # escudos, reduções de defesa... (ver aplicar_efeito)
+        self.efeitos = []  # escudos, reduções de defesa
         # Contadores usados por efeitos temporários (0 = desligado):
         self.provocacao = 0  # > 0: inimigos só atacam quem está provocando
         self.intangivel = 0  # > 0: inimigos não conseguem atacar
@@ -68,13 +68,12 @@ class Combatente:
             self.defesa -= 10
             self.defendendo = False
 
-    # ---------- efeitos temporários ----------
     def aplicar_efeito(self, chave, rotulo, atributo, delta, turnos):
-        """Muda um atributo (ex.: 'defesa') por `turnos` turnos DESTE combatente.
+        """Muda um atributo (ex.: 'defesa') por x turnos turnos DESTE combatente.
 
-        A contagem diminui no início de cada turno dele; ao chegar a 0 o
+        A contagem diminui no início de cada turno dele. ao chegar a 0 o
         efeito acaba e o atributo volta ao normal. Aplicar o mesmo efeito de
-        novo só renova a duração (não acumula)."""
+        novo só renova a duração."""
         for efeito in self.efeitos:
             if efeito['chave'] == chave:
                 efeito['turnos'] = max(efeito['turnos'], turnos)
@@ -103,7 +102,7 @@ class Combatente:
                     registrar(f'{self.nome}: {efeito["rotulo"]} terminou!')
 
     def remover_efeito(self, chave):
-        """Encerra antes da hora o efeito com essa chave (se existir)."""
+        """Encerra antes da hora o efeito com essa chave."""
         for efeito in list(self.efeitos):
             if efeito['chave'] == chave:
                 self._desfazer_efeito(efeito)
@@ -117,7 +116,6 @@ class Combatente:
                 getattr(self, efeito['atributo']) - efeito['delta'])
         self.efeitos.remove(efeito)
 
-    # ---------- reviver ----------
     def reviver(self, fracao_da_vida):
         """Traz um combatente derrotado de volta com uma parte da vida."""
         self.limpar_efeitos()

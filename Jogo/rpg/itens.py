@@ -1,8 +1,3 @@
-"""Itens (poções e armas de uso único): efeitos, sorteio de drops e inventário.
-
-Não tem nada visual: os itens são só entradas de texto no inventário.
-Para criar um item novo, basta acrescentar uma linha em POCOES.
-"""
 import random
 
 from .combatentes import causar_dano
@@ -10,12 +5,11 @@ from .registro import registrar
 
 # chave -> nome, tipo ('hp' cura vida / 'mp' recupera mana / 'revive'), quanto
 # recupera, chance de cair ao vencer uma luta (0 a 1), quantidade que cai
-# (mín, máx) e quantidade no começo do jogo ('inicial'; padrão QUANTIDADE_INICIAL)
+# (mín, máx) e quantidade no começo do jogo ('inicial' padrão QUANTIDADE_INICIAL)
 #
 # Itens de dano ('adaga' / 'bomba') são usados nos INIMIGOS:
 #   'adaga' -> um inimigo escolhido: 'valor' de dano (a defesa conta)
-#   'bomba' -> todos os inimigos vivos: 'valor' de dano em cada (ignora
-#              metade da defesa)
+#   'bomba' -> todos os inimigos vivos: 'valor' de dano em cada 
 POCOES = {
     'hp_p': {'nome': 'POÇÃO DE HP P', 'tipo': 'hp', 'valor': 30,  'chance': 0.40, 'qtd': (1, 2), 'inicial': 2},
     'hp_m': {'nome': 'POÇÃO DE HP M', 'tipo': 'hp', 'valor': 60,  'chance': 0.25, 'qtd': (1, 1), 'inicial': 0},
@@ -33,10 +27,10 @@ POCOES = {
               'qtd': (1, 1), 'inicial': 1},
 }
 
-# Em quem cada tipo de item é usado (o que não está aqui vai num aliado)
+# Em quem cada tipo de item é usado, se nao estiver aqui, é somente usável em aliados
 ALVO_POR_TIPO = {'adaga': 'inimigo', 'bomba': 'todos'}
 
-QUANTIDADE_INICIAL = 2        # de cada tipo (exceto as que definem 'inicial')
+QUANTIDADE_INICIAL = 2
 BONUS_CHANCE_POR_FASE = 0.05  
 
 
@@ -75,8 +69,8 @@ def pode_usar(chave, alvo):
 
 
 def usar_pocao(chave, usuario, alvo, inventario):
-    """Usa uma poção em `alvo`. Retorna True só se ela foi usada de fato
-    (a Luta usa isso para saber se o turno deve passar)."""
+    """Usa uma poção em um alvo. Retorna True só se ela foi usada de fato,
+    a Luta usa isso para saber se o turno deve passar."""
     pocao = POCOES[chave]
 
     if inventario.get(chave, 0) <= 0:
@@ -140,7 +134,7 @@ def usar_item_de_dano(chave, usuario, alvos, inventario):
 
 def sortear_drops(indice_fase, sorte=random):
     """Sorteia as poções ganhas ao vencer uma luta: {chave: quantidade}.
-    Cada tipo tem a sua própria chance; fases mais avançadas dão mais sorte."""
+    Cada tipo tem a sua própria chance, fases mais avançadas dão mais sorte."""
     bonus = 1 + BONUS_CHANCE_POR_FASE * indice_fase
     drops = {}
 

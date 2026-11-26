@@ -3,7 +3,7 @@ import random
 from .registro import registrar
 from . import itens
 
-ESPERA_ACAO = 45  # quadros de espera antes de inimigos/invocações agirem
+ESPERA_ACAO = 45
 
 
 class Luta:
@@ -17,9 +17,6 @@ class Luta:
             reverse=True
         )
 
-        # Invocações do time (ex.: Torreta). Agem sozinhas e podem ser
-        # atacadas, mas não contam como personagens (curas, poções e a
-        # condição de derrota ignoram elas).
         self.invocacoes = []
 
         self.indice_turno = 0
@@ -116,10 +113,10 @@ class Luta:
                     self.indice_turno += 1
 
     def usar_pocao(self, chave, alvo, inventario):
-        """O personagem da vez usa um item e gasta o turno: poção em `alvo`
-        (um aliado), adaga em `alvo` (um inimigo) ou bomba (todos os
-        inimigos; `alvo` é ignorado). Se não deu certo (sem estoque, vida/mana
-        já cheia...), o turno NÃO passa."""
+        """O personagem da vez usa um item e gasta o turno: poção em alvo
+        (um aliado), adaga em alvo (um inimigo) ou bomba (todos os
+        inimigos, alvo é ignorado). Se não deu certo (sem estoque, vida/mana
+        já cheia), o turno não passa."""
         combatente = self.combatente_atual()
 
         if combatente not in self.grupo_jogador or combatente.vida <= 0:
@@ -134,8 +131,7 @@ class Luta:
                 return
 
         elif tipo_alvo == 'todos':  # bomba (não precisa de alvo)
-            if not itens.usar_item_de_dano(chave, combatente,
-                                           self.grupo_inimigos, inventario):
+            if not itens.usar_item_de_dano(chave, combatente, self.grupo_inimigos, inventario):
                 return
 
         else:  # poções: num aliado

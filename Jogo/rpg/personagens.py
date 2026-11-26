@@ -6,8 +6,8 @@ class Personagem(Combatente):
     """Base dos personagens jogáveis.
 
     Cada personagem (subclasse) define as PRÓPRIAS habilidades:
-      - o dicionário HABILIDADES (chave -> nome, custo de mana, tipo de alvo)
-      - um método com o mesmo nome da chave, que faz o efeito
+    o dicionário HABILIDADES (chave -> nome, custo de mana, tipo de alvo)
+    um método com o mesmo nome da chave, que faz o efeito
     e também CLASSE (nome da classe) e SPRITE (imagem em assets/sprites/personagens).
 
     Tipos de alvo da habilidade (o que o método recebe):
@@ -25,7 +25,7 @@ class Personagem(Combatente):
     CLASSE = ''
     SPRITE = ''
 
-    # ---------- balanceamento: recuperação ----------
+    # balanceamento: recuperação
     MANA_POR_TURNO = 2        # mana recuperada no início de cada turno
     DESCANSO_VIDA = 0.20      # fração da vida máx. recuperada entre fases
     DESCANSO_MANA = 0.35      # fração da mana máx. recuperada entre fases
@@ -36,8 +36,6 @@ class Personagem(Combatente):
         super().__init__(nome, vida_maxima, vida, ataque, defesa, velocidade)
         self.mana_maxima = mana_maxima
         self.mana = mana_maxima
-        # Combatente invocado por este personagem (ex.: a Torreta do
-        # Engenheiro). A Luta coloca-o na ordem de turnos; é zerado a cada fase.
         self.invocacao = None
 
     def inicio_do_turno(self):
@@ -72,7 +70,7 @@ class Personagem(Combatente):
 
     def usar_habilidade(self, chave, alvo, inimigos, aliados=()):
         """Tenta usar a habilidade. Retorna True só se ela foi executada
-        (assim a Luta sabe se o turno deve passar)."""
+        assim a Luta sabe se o turno deve passar."""
         if self.vida <= 0 or chave not in self.HABILIDADES:
             return False
 
@@ -131,7 +129,7 @@ class Personagem(Combatente):
 
         return True
 
-    # ---------- utilitários compartilhados ----------
+    # utilitários compartilhados
     def _golpes(self, alvo, golpes, dano_base):
         """Vários golpes seguidos no mesmo alvo (a defesa conta em cada um).
         Retorna o dano total causado. Depois de anunciar o resultado, chame
@@ -152,9 +150,7 @@ class Personagem(Combatente):
             registrar(f'{alvo.nome} foi derrotado!')
 
 
-# =====================================================================
 # PYTHON - Guerreiro
-# =====================================================================
 class Guerreiro(Personagem):
     CLASSE = 'Guerreiro'
     SPRITE = 'gpython.png'
@@ -169,7 +165,7 @@ class Guerreiro(Personagem):
 
     def provocacao_global(self):
         # Até 2 turnos do Guerreiro: todos os inimigos só atacam ele,
-        # e ele ganha +5 de defesa para aguentar
+        # e ele ganha +5 de defesa para tankar
         rotulo = 'Provocação Global'
         self.aplicar_efeito('provocacao_global', rotulo, 'provocacao', 1, 2)
         self.aplicar_efeito('provocacao_global_def', rotulo, 'defesa', 5, 2)
@@ -193,9 +189,7 @@ class Guerreiro(Personagem):
         )
 
 
-# =====================================================================
 # JAVA - Mago
-# =====================================================================
 class Mago(Personagem):
     CLASSE = 'Mago'
     SPRITE = 'mjava.png'
@@ -226,7 +220,7 @@ class Mago(Personagem):
             )
 
     def meteoro_de_variavel(self, alvo):
-        # Dano singular fixo: ignora completamente a defesa
+        # Dano fixo: ignora completamente a defesa
         dano = 45
         causar_dano(
             alvo, dano,
@@ -234,10 +228,7 @@ class Mago(Personagem):
             f'{dano} de dano (ignora defesa) em {alvo.nome}!'
         )
 
-
-# =====================================================================
 # JAVASCRIPT - Ladino
-# =====================================================================
 class Ladino(Personagem):
     CLASSE = 'Ladino'
     SPRITE = 'Ljavascript.png'
@@ -252,7 +243,7 @@ class Ladino(Personagem):
         super().__init__('JavaScript', 90, 90, 25, 6, 5, mana_maxima=40)
         self.golpe_preparado = False
 
-    # ---------- Promessa Pendente ----------
+    # Promessa Pendente
     def promessa_pendente(self):
         # Fica intangível por 2 turnos (ou até atacar) e prepara um golpe
         # mais forte para o próximo ataque/habilidade
@@ -296,7 +287,7 @@ class Ladino(Personagem):
         super().limpar_efeitos()
         self.golpe_preparado = False
 
-    # ---------- golpes ----------
+    # golpes multiplos
     def investida_assincrona(self, alvo):
         # Ignora 25% da defesa do inimigo
         dano = max(1, self._poder(30) - int(alvo.defesa * 0.75))
@@ -317,10 +308,7 @@ class Ladino(Personagem):
                 alvo, dano, f'Golpe {golpe}: {dano} de dano em {alvo.nome}!'
             )
 
-
-# =====================================================================
 # C# - Paladino
-# =====================================================================
 class Paladino(Personagem):
     CLASSE = 'Paladino'
     SPRITE = 'Cpaladino.png'
@@ -335,7 +323,7 @@ class Paladino(Personagem):
         super().__init__('C#', 140, 140, 18, 10, 1, mana_maxima=50)
 
     def restaurar_instancia(self, alvo):
-        # Revive UM aliado derrotado com 50% da vida
+        # Revive 1 aliado derrotado com 50% da vida
         alvo.reviver(0.50)
         registrar(f'{self.nome} usou Restaurar Instância: '
                   f'{alvo.nome} voltou com {alvo.vida} de vida!')
@@ -360,10 +348,7 @@ class Paladino(Personagem):
             f'{self.nome} usou Código Divino: {dano} de dano em {alvo.nome}!'
         )
 
-
-# =====================================================================
 # C++ - Engenheiro  (desbloqueado ao zerar o jogo 1 vez)
-# =====================================================================
 class Torreta(Combatente):
     """Invocada pelo Engenheiro. Só ataca (sozinha, um inimigo aleatório) e
     recebe dano: não usa habilidades, não defende e não recebe poções, curas
@@ -418,10 +403,7 @@ class Engenheiro(Personagem):
             f'{self.nome} usou Falha de Segmentação: {dano} de dano em {alvo.nome}!'
         )
 
-
-# =====================================================================
 # DELPHI - Lanceiro  (desbloqueado ao zerar o jogo 2 vezes)
-# =====================================================================
 class Lanceiro(Personagem):
     CLASSE = 'Lanceiro'
     SPRITE = 'Dlanceiro.png'
@@ -463,10 +445,7 @@ class Lanceiro(Personagem):
                 inimigo, dano, f'{inimigo.nome} recebeu {dano} de dano!'
             )
 
-
-# =====================================================================
 # PHP - Arqueiro  (desbloqueado ao zerar o jogo 3 vezes)
-# =====================================================================
 class Arqueiro(Personagem):
     CLASSE = 'Arqueiro'
     SPRITE = 'Parqueiro.png'
@@ -510,10 +489,7 @@ class Arqueiro(Personagem):
             alvo.aplicar_efeito('flecha_depreciada_atq', rotulo, 'ataque', -6, 3)
             registrar(f'{alvo.nome} ficou enfraquecido: Defesa -5, Ataque -6!')
 
-
-# =====================================================================
 # RUBY - Hexxer  (desbloqueado ao zerar o jogo 4 vezes)
-# =====================================================================
 class Hexxer(Personagem):
     CLASSE = 'Hexxer'
     SPRITE = 'Rhexxer.png'
@@ -547,12 +523,9 @@ class Hexxer(Personagem):
         for inimigo in alvos:
             inimigo.aplicar_efeito('monkey_patch', 'Monkey Patch', 'defesa', -8, 3)
 
-
-# =====================================================================
 # PERSONAGENS
-# =====================================================================
 # A ordem importa: é a ordem dos 8 espaços da tela de seleção. Os 4 primeiros
-# já vêm liberados; os outros são liberados ao zerar o jogo (ver progresso.py).
+# já vêm liberados; os outros são liberados ao zerar o jogo em progresso.py.
 todos_personagens = [
     Guerreiro(),
     Mago(),

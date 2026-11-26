@@ -4,16 +4,14 @@ import pygame
 
 # assets/audio (a pasta rpg/ fica ao lado de assets/)
 PASTA = Path(__file__).resolve().parent.parent / 'assets' / 'audio'
-EXT = '.mp3'   # troque para '.mp3' ou '.wav' se for o caso
+EXT = '.mp3'   # mudança entre .mp3 ou .wav se for necessário
 
 MUSICA_MENU = str(PASTA / f'musica_menu{EXT}')
 MUSICA_VITORIA = str(PASTA / 'vitoria.mp3')
 
-
-# ---------- volumes (tela de opções) ----------
 # Cada volume vai de 0 a 100 (%). O volume final de um som é
 # volume_base_do_som × geral × (musica ou efeitos).
-# Os valores ficam salvos em opcoes.json, ao lado do main.py.
+# Os valores ficam salvos em opcoes.json.
 ARQUIVO_OPCOES = Path(__file__).resolve().parent.parent / 'opcoes.json'
 VOLUMES_PADRAO = {'geral': 80, 'musica': 60, 'efeitos': 70}
 
@@ -50,7 +48,6 @@ def _fator(chave):
     return volumes['geral'] / 100 * volumes[chave] / 100
 
 
-# ---------- música ----------
 FASE_CHEFE_FINAL = 15
 MUSICA_FINAL = str(PASTA / 'musica_final.wav')
 
@@ -88,10 +85,10 @@ def tocar(caminho, volume=0.5, repetir=True):
     pygame.mixer.music.play(-1 if repetir else 0)
 
 
-# ---------- efeitos sonoros de dano ----------
+# efeitos sonoros de dano 
 DANO_LEVE = str(PASTA / 'dano_leve.wav')
 DANO_PESADO = str(PASTA / 'dano_pesado.wav')
-LIMITE_DANO_LEVE = 20  # 1..25 = leve, 26+ = pesado
+LIMITE_DANO_LEVE = 20 
 
 _sons = {}  # carregados na primeira vez que forem usados
 
@@ -113,7 +110,7 @@ def tocar_efeito(caminho, volume=0.7):
 
 
 def tocar_dano(valor, volume=0.7):
-    """Toca o som de dano leve (1 a 25) ou pesado (26 em diante)."""
+    """Toca o som de dano leve ou pesado."""
     if valor <= 0:
         return
     tocar_efeito(DANO_LEVE if valor <= LIMITE_DANO_LEVE else DANO_PESADO, volume)

@@ -1,8 +1,7 @@
 """Progresso salvo do jogador: quantas vezes ele ZEROU o jogo (venceu as 15 fases).
 
 Cada vez que o jogo é zerado, mais um personagem é desbloqueado. Os 4 primeiros
-já vêm liberados. O progresso fica no arquivo save.json, ao lado do main.py
-(para liberar tudo de uma vez para testar, escreva {"zeradas": 4} nele).
+já vêm liberados. O progresso fica no arquivo save.json.
 """
 import json
 from pathlib import Path
@@ -13,7 +12,6 @@ TOTAL_PERSONAGENS = 8
 BASICOS = 4  # personagens já liberados no começo
 
 # Modo demonstração: todos os personagens já começam liberados.
-# Mude para False para voltar ao desbloqueio normal (por zeradas).
 MODO_DEMO = True
 
 
