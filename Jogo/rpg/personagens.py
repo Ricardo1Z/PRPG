@@ -17,6 +17,7 @@ class Personagem(Combatente):
       'time'    -> (aliados)  todos os aliados vivos (inclui ele mesmo)
       'aliado'  -> (alvo)     um aliado vivo e ferido, escolhido pelo jogador
       'mortos'  -> (mortos)   todos os aliados derrotados
+      'morto'   -> (alvo)     um aliado derrotado, escolhido pelo jogador
     """
 
     HABILIDADES = {}
@@ -28,6 +29,9 @@ class Personagem(Combatente):
         super().__init__(nome, vida_maxima, vida, ataque, defesa, velocidade)
         self.mana_maxima = mana_maxima
         self.mana = mana_maxima
+        # Combatente invocado por este personagem (ex.: a Torreta do
+        # Engenheiro). A Luta coloca-o na ordem de turnos; é zerado a cada fase.
+        self.invocacao = None
 
     # ---------- mana e habilidades ----------
     def restaurar_mana(self):
@@ -73,6 +77,11 @@ class Personagem(Combatente):
             registrar('Nenhum aliado está derrotado!')
             return False
 
+        if tipo == 'morto' and alvo not in mortos:
+            if alvo is not None:
+                registrar(f'{alvo.nome} não está derrotado!')
+            return False
+
         if not self.tem_mana(chave):
             registrar(
                 f'{self.nome} está sem mana para {info["nome"]} '
@@ -83,7 +92,7 @@ class Personagem(Combatente):
         self.mana -= info['custo']
         efeito = getattr(self, chave)
 
-        if tipo in ('inimigo', 'aliado'):
+        if tipo in ('inimigo', 'aliado', 'morto'):
             efeito(alvo)
         elif tipo == 'todos':
             efeito(vivos)
@@ -136,10 +145,20 @@ class Guerreiro(Personagem):
     HABILIDADES = {
         'picada_mortal': {'nome': 'Picada Mortal', 'custo': 10, 'alvo': 'inimigo'},
         'salto_de_bits': {'nome': 'Salto de Bits', 'custo': 20, 'alvo': 'inimigo'},
+        'provocacao_global': {'nome': 'Provocação Global', 'custo': 10, 'alvo': 'nenhum'},
     }
 
     def __init__(self):
         super().__init__('Python', 100, 100, 15, 8, 3, mana_maxima=40)
+
+    def provocacao_global(self):
+        # Até 2 turnos do Guerreiro: todos os inimigos só atacam ele,
+        # e ele ganha +5 de defesa para aguentar
+        rotulo = 'Provocação Global'
+        self.aplicar_efeito('provocacao_global', rotulo, 'provocacao', 1, 2)
+        self.aplicar_efeito('provocacao_global_def', rotulo, 'defesa', 5, 2)
+        registrar(f'{self.nome} usou Provocação Global! '
+                  f'Os inimigos só atacam ele. Defesa +5')
 
     def picada_mortal(self, alvo):
         # Dano fixo: ignora completamente a defesa
@@ -165,12 +184,21 @@ class Mago(Personagem):
     CLASSE = 'Mago'
     SPRITE = 'mjava.png'
     HABILIDADES = {
+        'lancar_excecao': {'nome': 'Lançar Exceção', 'custo': 10, 'alvo': 'inimigo'},
         'cadeia_de_codigos': {'nome': 'Cadeia de Códigos', 'custo': 15, 'alvo': 'todos'},
-        'meteoro_de_variavel': {'nome': 'Meteoro de Variável', 'custo': 30, 'alvo': 'todos'},
+        'meteoro_de_variavel': {'nome': 'Meteoro de Variável', 'custo': 30, 'alvo': 'inimigo'},
     }
 
     def __init__(self):
         super().__init__('Java', 80, 80, 25, 7, 2, mana_maxima=60)
+
+    def lancar_excecao(self, alvo):
+        # Dano singular simples (a defesa do alvo conta normalmente)
+        dano = max(1, 32 - alvo.defesa)
+        self._causar_dano(
+            alvo, dano,
+            f'{self.nome} usou Lançar Exceção: {dano} de dano em {alvo.nome}!'
+        )
 
     def cadeia_de_codigos(self, alvos):
         registrar(f'{self.nome} lançou Cadeia de Códigos!')
@@ -181,15 +209,14 @@ class Mago(Personagem):
                 inimigo, dano, f'{inimigo.nome} recebeu {dano} de dano!'
             )
 
-    def meteoro_de_variavel(self, alvos):
-        registrar(f'{self.nome} lançou Meteoro de Variável!')
-
-        for inimigo in alvos:
-            # Ignora 50% da defesa
-            dano = max(1, 40 - inimigo.defesa // 2)
-            self._causar_dano(
-                inimigo, dano, f'{inimigo.nome} recebeu {dano} de dano!'
-            )
+    def meteoro_de_variavel(self, alvo):
+        # Dano singular fixo: ignora completamente a defesa
+        dano = 45
+        self._causar_dano(
+            alvo, dano,
+            f'{self.nome} lançou Meteoro de Variável: '
+            f'{dano} de dano (ignora defesa) em {alvo.nome}!'
+        )
 
 
 # =====================================================================
@@ -201,14 +228,63 @@ class Ladino(Personagem):
     HABILIDADES = {
         'investida_assincrona': {'nome': 'Investida Assíncrona', 'custo': 10, 'alvo': 'inimigo'},
         'rajada_de_scripts': {'nome': 'Rajada de Scripts', 'custo': 20, 'alvo': 'inimigo'},
+        'promessa_pendente': {'nome': 'Promessa Pendente', 'custo': 15, 'alvo': 'nenhum'},
     }
+    BONUS_PREPARADO = 1.5  # dano do próximo ataque/habilidade depois da Promessa
 
     def __init__(self):
         super().__init__('JavaScript', 90, 90, 20, 6, 5, mana_maxima=40)
+        self.golpe_preparado = False
 
+    # ---------- Promessa Pendente ----------
+    def promessa_pendente(self):
+        # Fica intangível por 2 turnos (ou até atacar) e prepara um golpe
+        # mais forte para o próximo ataque/habilidade
+        self.aplicar_efeito('promessa_pendente', 'Intangibilidade',
+                            'intangivel', 1, 2)
+        self.golpe_preparado = True
+        registrar(f'{self.nome} usou Promessa Pendente! Ficou intangível '
+                  f'e o próximo golpe causa +50% de dano')
+
+    def _poder(self, base):
+        """Dano base, já com o bônus do golpe preparado (se houver)."""
+        if self.golpe_preparado:
+            return int(base * self.BONUS_PREPARADO)
+        return base
+
+    def _resolver_promessa(self):
+        """Depois de atacar: gasta o bônus e sai da intangibilidade."""
+        if self.golpe_preparado:
+            self.golpe_preparado = False
+        if self.intangivel > 0:
+            self.remover_efeito('promessa_pendente')
+            registrar(f'{self.nome} atacou e deixou de ser intangível!')
+
+    def atacar(self, alvo):
+        ataque_normal = self.ataque
+        self.ataque = self._poder(self.ataque)
+        try:
+            dano = super().atacar(alvo)
+        finally:
+            self.ataque = ataque_normal
+        if dano:
+            self._resolver_promessa()
+        return dano
+
+    def usar_habilidade(self, chave, alvo, inimigos, aliados=()):
+        usou = super().usar_habilidade(chave, alvo, inimigos, aliados)
+        if usou and chave != 'promessa_pendente':
+            self._resolver_promessa()
+        return usou
+
+    def limpar_efeitos(self):
+        super().limpar_efeitos()
+        self.golpe_preparado = False
+
+    # ---------- golpes ----------
     def investida_assincrona(self, alvo):
         # Ignora 25% da defesa do inimigo
-        dano = max(1, 30 - int(alvo.defesa * 0.75))
+        dano = max(1, self._poder(30) - int(alvo.defesa * 0.75))
         self._causar_dano(
             alvo, dano,
             f'{self.nome} usou Investida Assíncrona: {dano} de dano em {alvo.nome}!'
@@ -221,7 +297,7 @@ class Ladino(Personagem):
             if alvo.vida <= 0:
                 break
 
-            dano = max(1, 15 - alvo.defesa)
+            dano = max(1, self._poder(15) - alvo.defesa)
             self._causar_dano(
                 alvo, dano, f'Golpe {golpe}: {dano} de dano em {alvo.nome}!'
             )
@@ -236,10 +312,17 @@ class Paladino(Personagem):
     HABILIDADES = {
         'escudo_de_compilacao': {'nome': 'Escudo de Compilação', 'custo': 10, 'alvo': 'nenhum'},
         'codigo_divino': {'nome': 'Código Divino', 'custo': 30, 'alvo': 'inimigo'},
+        'restaurar_instancia': {'nome': 'Restaurar Instância', 'custo': 35, 'alvo': 'morto'},
     }
 
     def __init__(self):
         super().__init__('C#', 150, 150, 10, 10, 1, mana_maxima=50)
+
+    def restaurar_instancia(self, alvo):
+        # Revive UM aliado derrotado com 50% da vida
+        alvo.reviver(0.50)
+        registrar(f'{self.nome} usou Restaurar Instância: '
+                  f'{alvo.nome} voltou com {alvo.vida} de vida!')
 
     def escudo_de_compilacao(self):
         # +20 de defesa até o próximo turno do Paladino
@@ -259,16 +342,43 @@ class Paladino(Personagem):
 # =====================================================================
 # C++ - Engenheiro  (desbloqueado ao zerar o jogo 1 vez)
 # =====================================================================
+class Torreta(Combatente):
+    """Invocada pelo Engenheiro. Só ataca (sozinha, um inimigo aleatório) e
+    recebe dano: não usa habilidades, não defende e não recebe poções, curas
+    nem escudos do time. Some no fim da luta."""
+    SPRITE = 'torreta.png'
+
+    def __init__(self):
+        super().__init__('Torreta', 45, 45, 16, 6, 2)
+
+
 class Engenheiro(Personagem):
     CLASSE = 'Engenheiro'
     SPRITE = 'Cengenheiro.png'
     HABILIDADES = {
         'barreira_de_ponteiros': {'nome': 'Barreira de Ponteiros', 'custo': 25, 'alvo': 'time'},
         'falha_de_segmentacao': {'nome': 'Falha de Segmentação', 'custo': 20, 'alvo': 'inimigo'},
+        'invocar_torreta': {'nome': 'Invocar Torreta', 'custo': 30, 'alvo': 'nenhum'},
     }
 
     def __init__(self):
         super().__init__('C++', 110, 110, 14, 9, 2, mana_maxima=55)
+
+    def usar_habilidade(self, chave, alvo, inimigos, aliados=()):
+        # Só uma torreta por vez: enquanto ela estiver de pé, não gasta mana
+        if (chave == 'invocar_torreta' and self.invocacao
+                and self.invocacao.vida > 0):
+            registrar('A Torreta já está em campo!')
+            return False
+        return super().usar_habilidade(chave, alvo, inimigos, aliados)
+
+    def invocar_torreta(self):
+        # Se a torreta já foi destruída nesta luta, ela volta com vida cheia
+        if self.invocacao is None:
+            self.invocacao = Torreta()
+        else:
+            self.invocacao.reviver(1.0)
+        registrar(f'{self.nome} invocou uma Torreta!')
 
     def barreira_de_ponteiros(self, aliados):
         # Escudo no time inteiro: +12 de defesa por 2 turnos de cada um
@@ -296,10 +406,23 @@ class Lanceiro(Personagem):
     HABILIDADES = {
         'estocada_em_cascata': {'nome': 'Estocada em Cascata', 'custo': 25, 'alvo': 'inimigo'},
         'giro_de_unidade': {'nome': 'Giro de Unidade', 'custo': 20, 'alvo': 'todos'},
+        'lanca_perfurante': {'nome': 'Lança Perfurante', 'custo': 15, 'alvo': 'inimigo'},
     }
 
     def __init__(self):
         super().__init__('Delphi', 120, 120, 18, 8, 3, mana_maxima=45)
+
+    def lanca_perfurante(self, alvo):
+        # Dano singular e, se o alvo sobreviver, -6 de defesa por 3 turnos dele
+        dano = max(1, 24 - alvo.defesa)
+        self._causar_dano(
+            alvo, dano,
+            f'{self.nome} usou Lança Perfurante: {dano} de dano em {alvo.nome}!'
+        )
+        if alvo.vida > 0:
+            alvo.aplicar_efeito('lanca_perfurante', 'Armadura Perfurada',
+                                'defesa', -6, 3)
+            registrar(f'Defesa de {alvo.nome} -6!')
 
     def estocada_em_cascata(self, alvo):
         # Dano singular em 3 golpes
@@ -338,7 +461,7 @@ class Arqueiro(Personagem):
         registrar(f'{self.nome} usou Chuva de Requisições! (3 golpes em cada)')
 
         for inimigo in alvos:
-            total = self._golpes(inimigo, 3, 14)
+            total = self._golpes(inimigo, 3, 10)
             registrar(f'{inimigo.nome} recebeu {total} de dano!')
             self._anunciar_derrota(inimigo)
 

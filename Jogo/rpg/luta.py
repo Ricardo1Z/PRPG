@@ -17,6 +17,11 @@ class Luta:
             reverse=True
         )
 
+        # Invocações do time (ex.: Torreta). Agem sozinhas e podem ser
+        # atacadas, mas não contam como personagens (curas, poções e a
+        # condição de derrota ignoram elas).
+        self.invocacoes = []
+
         self.indice_turno = 0
         self.tempo_inimigo = 0
         self.resultado = None
@@ -99,22 +104,49 @@ class Luta:
             return
 
         # Só chega aqui se a ação deu certo
+        self.receber_invocacoes()
         self.avancar_turno()
 
+    def receber_invocacoes(self):
+        """Coloca na ordem de turnos as invocações novas do time. Ela entra
+        logo ANTES de quem invocou, então só age na próxima rodada."""
+        for p in self.grupo_jogador:
+            inv = getattr(p, 'invocacao', None)
+            if inv is not None and inv not in self.invocacoes:
+                self.invocacoes.append(inv)
+                posicao = self.ordem_turnos.index(p)
+                self.ordem_turnos.insert(posicao, inv)
+                if posicao <= self.indice_turno:
+                    self.indice_turno += 1
+
     def usar_pocao(self, chave, alvo, inventario):
-        """O personagem da vez usa uma poção em `alvo` (um aliado) e gasta o
-        turno. Se não deu certo (sem estoque, vida/mana já cheia...), o turno
-        NÃO passa."""
+        """O personagem da vez usa um item e gasta o turno: poção em `alvo`
+        (um aliado), adaga em `alvo` (um inimigo) ou bomba (todos os
+        inimigos; `alvo` é ignorado). Se não deu certo (sem estoque, vida/mana
+        já cheia...), o turno NÃO passa."""
         combatente = self.combatente_atual()
 
         if combatente not in self.grupo_jogador or combatente.vida <= 0:
             return
 
-        if alvo not in self.grupo_jogador:
-            return
+        tipo_alvo = itens.alvo_item(chave)
 
-        if not itens.usar_pocao(chave, combatente, alvo, inventario):
-            return
+        if tipo_alvo == 'inimigo':  # adaga
+            if alvo not in self.grupo_inimigos or alvo.vida <= 0:
+                return
+            if not itens.usar_item_de_dano(chave, combatente, [alvo], inventario):
+                return
+
+        elif tipo_alvo == 'todos':  # bomba (não precisa de alvo)
+            if not itens.usar_item_de_dano(chave, combatente,
+                                           self.grupo_inimigos, inventario):
+                return
+
+        else:  # poções: num aliado
+            if alvo not in self.grupo_jogador:
+                return
+            if not itens.usar_pocao(chave, combatente, alvo, inventario):
+                return
 
         self.avancar_turno()
 
@@ -126,7 +158,17 @@ class Luta:
 
         combatente = self.combatente_atual()
 
-        if combatente in self.grupo_inimigos:
+        if combatente in self.invocacoes:
+            # Invocação: espera um pouco e ataca um inimigo vivo aleatório
+            self.tempo_inimigo += 1
+            if self.tempo_inimigo >= 45:
+                self.tempo_inimigo = 0
+                alvos = [i for i in self.grupo_inimigos if i.vida > 0]
+                if alvos:
+                    combatente.atacar(random.choice(alvos))
+                self.avancar_turno()
+
+        elif combatente in self.grupo_inimigos:
             self.tempo_inimigo += 1
 
             # Espera um pouco antes da ação do inimigo
@@ -136,11 +178,19 @@ class Luta:
                 acao = combatente.escolher_acao()
 
                 if acao == "atacar":
-                    alvos = [p for p in self.grupo_jogador if p.vida > 0]
+                    # Intangíveis não podem ser atacados; se alguém está
+                    # provocando, os inimigos só atacam quem provoca.
+                    alvos = [p for p in self.grupo_jogador + self.invocacoes
+                             if p.vida > 0 and p.intangivel <= 0]
+                    provocando = [p for p in alvos if p.provocacao > 0]
+                    if provocando:
+                        alvos = provocando
 
                     if alvos:
                         alvo = random.choice(alvos)
                         combatente.atacar(alvo)
+                    else:
+                        registrar(f"{combatente.nome} não encontrou ninguém para atacar!")
 
                 elif acao == "defender":
                     combatente.defender()

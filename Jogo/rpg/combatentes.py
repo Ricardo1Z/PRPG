@@ -5,12 +5,30 @@ class Combatente:
     def __init__(self, nome, vida_maxima, vida, ataque, defesa, velocidade):
         self.nome = nome
         self.vida_maxima = vida_maxima
-        self.vida = vida
+        self.danos_recentes = []  # danos ainda não mostrados na tela (ver vida.setter)
+        self._vida = vida
         self.ataque = ataque
         self.defesa = defesa
         self.velocidade = velocidade
         self.defendendo = False
         self.efeitos = []  # escudos, reduções de defesa... (ver aplicar_efeito)
+        # Contadores usados por efeitos temporários (0 = desligado):
+        self.provocacao = 0  # > 0: inimigos só atacam quem está provocando
+        self.intangivel = 0  # > 0: inimigos não conseguem atacar
+
+    # ---------- vida ----------
+    # Toda vez que a vida cai, a perda é anotada em `danos_recentes`; a tela
+    # de batalha lê essa lista para piscar o sprite e mostrar o "-N" flutuando.
+    @property
+    def vida(self):
+        return self._vida
+
+    @vida.setter
+    def vida(self, valor):
+        perda = self._vida - valor
+        if perda > 0:
+            self.danos_recentes.append(perda)
+        self._vida = valor
 
     def atacar(self, alvo):
         if self.vida <= 0:
@@ -67,11 +85,20 @@ class Combatente:
 
     def inicio_do_turno(self):
         """Chamado pela Luta quando começa o turno deste combatente."""
+        avisados = set()  # efeitos com várias partes avisam uma vez só
         for efeito in list(self.efeitos):
             efeito['turnos'] -= 1
             if efeito['turnos'] <= 0:
                 self._desfazer_efeito(efeito)
-                registrar(f'{self.nome}: {efeito["rotulo"]} terminou!')
+                if efeito['rotulo'] not in avisados:
+                    avisados.add(efeito['rotulo'])
+                    registrar(f'{self.nome}: {efeito["rotulo"]} terminou!')
+
+    def remover_efeito(self, chave):
+        """Encerra antes da hora o efeito com essa chave (se existir)."""
+        for efeito in list(self.efeitos):
+            if efeito['chave'] == chave:
+                self._desfazer_efeito(efeito)
 
     def limpar_efeitos(self):
         for efeito in list(self.efeitos):

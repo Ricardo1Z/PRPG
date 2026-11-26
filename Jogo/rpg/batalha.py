@@ -1,3 +1,5 @@
+import math
+
 import pygame
 
 from .telas import (LARGURA, ALTURA, SPRITES, INIMIGOS, PERSONAGENS, TELAS,
@@ -47,7 +49,20 @@ BORDA_QUADRO = 32              # px da moldura (cantos) em quadro_habilidades.pn
 # parte de dentro da moldura, em fração do quadro: (esquerda, cima, direita, baixo)
 INTERIOR_QUADRO = (0.12, 0.09, 0.88, 0.92)
 TAM_BOTAO_HAB = (212, 60)      # tamanho dos botões dentro do quadro (= tamanho do PNG)
-ALTURA_BOTAO_ITEM = 34         # botões das poções são mais baixos (cabem 7 + VOLTAR)
+ALTURA_BOTAO_ITEM = 34         # botões dos itens são mais baixos
+
+# Quadro de itens: mesma moldura, mas com os botões em 2 colunas
+# (5 linhas cada: 9 itens + VOLTAR no fim da 2ª coluna).
+COLUNAS_ITENS = 2
+LINHAS_ITENS = 5
+ESPACO_ITENS = 10              # px entre os botões dos itens
+# margens (px) da parte de dentro da moldura: esquerda, cima, direita, baixo
+MARGENS_QUADRO = (35, 33, 35, 30)
+LARGURA_QUADRO_ITENS = (MARGENS_QUADRO[0] + MARGENS_QUADRO[2]
+                        + COLUNAS_ITENS * TAM_BOTAO_HAB[0] + (COLUNAS_ITENS - 1) * 14)
+ALTURA_QUADRO_ITENS = (MARGENS_QUADRO[1] + MARGENS_QUADRO[3]
+                       + LINHAS_ITENS * ALTURA_BOTAO_ITEM
+                       + (LINHAS_ITENS + 1) * ESPACO_ITENS)
 
 TAM_PERSONAGEM = 96
 TAM_INIMIGO = 120  # só para o placeholder (usado se o sprite do inimigo não existir)
@@ -94,6 +109,10 @@ LINHAS_Y = (270, 440)   # y do sprite de cada linha (cabem nome + vida + mana)
 X_FRENTE = 190          # x do 1º personagem da linha da frente
 ESPACO_X = 130          # distância horizontal entre os dois da linha
 DESLOC_TRAS = 80        # quanto a linha de trás recua para a esquerda
+
+# Invocações (Torreta): ficam à frente do time, na altura da linha da frente
+X_INVOCACAO = X_FRENTE + 2 * ESPACO_X
+TAM_INVOCACAO = 80
 
 # ---------- ampliação (destaque e hover) ----------
 ESCALA_TURNO = 1.2            # personagem que está na vez
@@ -152,6 +171,10 @@ ALTURA_BARRA = 22
 moldura_barra = nove_fatias(
     carregar('contorno.png').convert_alpha(),
     TAM_PERSONAGEM, ALTURA_BARRA, BORDA_BARRA
+)
+moldura_invocacao = nove_fatias(
+    carregar('contorno.png').convert_alpha(),
+    TAM_INVOCACAO, ALTURA_BARRA, BORDA_BARRA
 )
 fonte_nome = pygame.font.Font(None, 24)
 fonte_hp = pygame.font.Font(None, 18)
@@ -231,22 +254,22 @@ botao_item = recortar_linhas(_botao_54, [(0, 16), (26, 29), (39, 54)])
 botao_item_apagado = escurecer(botao_item)
 
 
-def carregar_quadro():
+def carregar_quadro(largura=LARGURA_QUADRO, altura=ALTURA_QUADRO):
     caminho = INTERFACE / 'quadro_habilidades.png'
     if caminho.exists():
         img = pygame.image.load(str(caminho)).convert_alpha()
         b = BORDA_QUADRO
         w, h = img.get_size()
-        quadro = pygame.Surface((LARGURA_QUADRO, ALTURA_QUADRO), pygame.SRCALPHA)
+        quadro = pygame.Surface((largura, altura), pygame.SRCALPHA)
         # miolo (nove_fatias só desenha as bordas)
         miolo = img.subsurface((b, b, w - 2 * b, h - 2 * b))
         quadro.blit(pygame.transform.scale(
-            miolo, (LARGURA_QUADRO - 2 * b, ALTURA_QUADRO - 2 * b)), (b, b))
-        quadro.blit(nove_fatias(img, LARGURA_QUADRO, ALTURA_QUADRO, b), (0, 0))
+            miolo, (largura - 2 * b, altura - 2 * b)), (b, b))
+        quadro.blit(nove_fatias(img, largura, altura, b), (0, 0))
         return quadro
 
     print('[aviso] quadro_habilidades.png não encontrado; usando um quadro simples')
-    img = pygame.Surface((LARGURA_QUADRO, ALTURA_QUADRO), pygame.SRCALPHA)
+    img = pygame.Surface((largura, altura), pygame.SRCALPHA)
     img.fill((18, 30, 54, 255))
     pygame.draw.rect(img, (120, 140, 180), img.get_rect(), 6)
     return img
@@ -254,6 +277,10 @@ def carregar_quadro():
 
 quadro_habilidades = carregar_quadro()
 RECT_QUADRO = quadro_habilidades.get_rect(
+    midbottom=(CAIXA_MENU.centerx, CAIXA_MENU.top - 2)
+)
+quadro_itens = carregar_quadro(LARGURA_QUADRO_ITENS, ALTURA_QUADRO_ITENS)
+RECT_QUADRO_ITENS = quadro_itens.get_rect(
     midbottom=(CAIXA_MENU.centerx, CAIXA_MENU.top - 2)
 )
 
@@ -267,6 +294,38 @@ _TAMANHOS_FONTE = (28, 26, 24, 22, 20, 18, 16, 15, 14) if _arquivo_fonte is None
     else (24, 16, 12, 8)   # múltiplos da grade da fonte: pixels nítidos
 FONTES_BOTAO = {tam: pygame.font.Font(_arquivo_fonte, tam) for tam in _TAMANHOS_FONTE}
 _cache_texto = {}
+
+
+# ---------- efeitos de dano ----------
+# Quem leva dano pisca em branco, dá um "pulo" de tamanho (como o hover) e
+# solta um número vermelho (ex.: -4) que sobe e some.
+DURACAO_PISCADA = 250        # ms do brilho branco
+DURACAO_PULO = 300           # ms da ampliação
+ESCALA_DANO = 1.1            # tamanho máximo no meio do pulo
+DURACAO_NUMERO = 1000        # ms até o número sumir
+SUBIDA_NUMERO = 45           # quantos pixels o número sobe
+COR_DANO = (235, 40, 40)
+fonte_dano = pygame.font.Font(_arquivo_fonte, 24 if _arquivo_fonte else 40)
+
+
+def silhueta_branca(img):
+    """Cópia do sprite toda branca (mantendo a transparência)."""
+    branca = img.copy()
+    branca.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_MAX)
+    return branca
+
+
+def texto_dano(valor):
+    """'-N' vermelho com contorno escuro (para ler sobre qualquer fundo)."""
+    conteudo = f'-{valor}'
+    frente = fonte_dano.render(conteudo, SUAVIZAR_TEXTO, COR_DANO)
+    contorno = fonte_dano.render(conteudo, SUAVIZAR_TEXTO, (40, 0, 0))
+    w, h = frente.get_size()
+    s = pygame.Surface((w + 4, h + 4), pygame.SRCALPHA)
+    for dx, dy in ((0, 2), (4, 2), (2, 0), (2, 4), (0, 0), (4, 0), (0, 4), (4, 4)):
+        s.blit(contorno, (dx, dy))
+    s.blit(frente, (2, 2))
+    return s
 
 
 def _quebrar_em_duas(conteudo, fonte):
@@ -428,6 +487,8 @@ class Batalha:
         self.novo_personagem = None  # índice do personagem liberado ao zerar o jogo
         self.zoom = Zoom()           # personagens, inimigos e botões de ação
         self.zoom_quadro = Zoom()    # botões do quadro de habilidades/itens
+        self.ultimo_dano = {}        # id(combatente) -> instante (ms) do último dano
+        self.numeros_dano = []       # números flutuantes: [img, x, y, inicio]
 
         self.sprites = {}
         for p in self.grupo:
@@ -441,9 +502,14 @@ class Batalha:
         for p in self.grupo:
             p.remover_defesa()
             p.limpar_efeitos()  # escudos da luta anterior não passam de fase
+            p.invocacao = None  # a torreta não passa de fase
         limpar()
         self.zoom.limpar()
         self.zoom_quadro.limpar()
+        self.ultimo_dano.clear()
+        self.numeros_dano.clear()
+        for p in self.grupo:
+            p.danos_recentes.clear()
 
         self.inimigos = [criar_inimigo(chave) for chave in FASES[self.fase]]
         self.rects_inimigos = self.calcular_rects_inimigos()
@@ -501,11 +567,10 @@ class Batalha:
         """Botões dentro do quadro (habilidades ou poções, conforme o modo):
         [(rect, 'habilidade' | 'item' | 'voltar', dados)]."""
         if self.modo == 'itens':
-            entradas = [('item', chave) for chave in itens.POCOES]
-            alt = ALTURA_BOTAO_ITEM
-        else:
-            entradas = [('habilidade', h) for h in atual.lista_habilidades()]
-            alt = TAM_BOTAO_HAB[1]
+            return self.botoes_itens()
+
+        entradas = [('habilidade', h) for h in atual.lista_habilidades()]
+        alt = TAM_BOTAO_HAB[1]
 
         fx0, fy0, fx1, fy1 = INTERIOR_QUADRO
         q = RECT_QUADRO
@@ -530,6 +595,28 @@ class Batalha:
         ))
         return botoes
 
+    def botoes_itens(self):
+        """Botões do quadro de itens, em colunas (de cima para baixo, depois
+        a próxima coluna); VOLTAR fica no último espaço."""
+        entradas = [('item', chave) for chave in itens.POCOES]
+
+        q = RECT_QUADRO_ITENS
+        esq, cima, _, _ = MARGENS_QUADRO
+        larg, alt = TAM_BOTAO_HAB[0], ALTURA_BOTAO_ITEM
+
+        def rect(coluna, linha):
+            x = q.x + esq + coluna * (larg + 14)
+            y = q.y + cima + ESPACO_ITENS + linha * (alt + ESPACO_ITENS)
+            return pygame.Rect(x, y, larg, alt)
+
+        botoes = []
+        for n, (tipo, dados) in enumerate(entradas):
+            coluna, linha = divmod(n, LINHAS_ITENS)
+            botoes.append((rect(coluna, linha), tipo, dados))
+        # VOLTAR: canto de baixo à direita
+        botoes.append((rect(COLUNAS_ITENS - 1, LINHAS_ITENS - 1), 'voltar', None))
+        return botoes
+
     def inimigo_na_posicao(self, pos):
         # quem está na frente é testado primeiro
         for i in reversed(self.ordem_de_tras_para_frente()):
@@ -552,6 +639,8 @@ class Batalha:
         """Botão direito / ESC: volta um passo no menu."""
         if self.modo == 'alvo' and self.habilidade_escolhida:
             self.modo = 'habilidades'
+        elif self.modo == 'alvo' and self.item_escolhido:  # adaga
+            self.modo = 'itens'
         elif self.modo == 'alvo_aliado':
             self.modo = 'habilidades' if self.habilidade_escolhida else 'itens'
         else:
@@ -577,6 +666,13 @@ class Batalha:
             self.habilidade_escolhida = chave
             self.modo = 'alvo_aliado'
 
+        elif tipo_alvo == 'morto':
+            if not any(p.vida <= 0 for p in self.grupo):
+                registrar('Nenhum aliado está derrotado!')
+                return
+            self.habilidade_escolhida = chave
+            self.modo = 'alvo_aliado'
+
         else:  # 'todos', 'time', 'mortos' ou 'nenhum': não precisa escolher alvo
             mana_antes = atual.mana
             self.luta.executar_acao_jogador(chave)
@@ -590,6 +686,18 @@ class Batalha:
             registrar(f'Você não tem mais {nome}!')
             return
 
+        tipo_alvo = itens.alvo_item(chave)
+        if tipo_alvo == 'inimigo':   # adaga: escolhe o inimigo
+            self.item_escolhido = chave
+            self.modo = 'alvo'
+            return
+        if tipo_alvo == 'todos':     # bomba: acerta todos na hora
+            antes = self.inventario[chave]
+            self.luta.usar_pocao(chave, None, self.inventario)
+            if self.inventario[chave] < antes:  # funcionou: fecha o quadro
+                self.modo = 'acao'
+            return
+
         if not any(itens.pode_usar(chave, p)[0] for p in self.grupo):
             registrar(f'Ninguém precisa de {nome} agora!')
             return
@@ -601,7 +709,12 @@ class Batalha:
         """Quem pode receber a poção/habilidade escolhida (para contornar)."""
         if self.item_escolhido:
             return itens.pode_usar(self.item_escolhido, aliado)[0]
-        if self.habilidade_escolhida:  # cura: só vivo e ferido
+        if self.habilidade_escolhida:
+            atual = self.luta.combatente_atual()
+            tipo = atual.HABILIDADES[self.habilidade_escolhida]['alvo']
+            if tipo == 'morto':  # reviver: só derrotado
+                return aliado.vida <= 0
+            # cura: só vivo e ferido
             return aliado.vida > 0 and aliado.vida < aliado.vida_maxima
         return False
 
@@ -654,10 +767,14 @@ class Batalha:
         elif self.modo == 'alvo':
             alvo = self.inimigo_na_posicao(ev.pos)
             if alvo:
-                acao = self.habilidade_escolhida or 'atacar'
-                self.luta.executar_acao_jogador(acao, alvo)
+                if self.item_escolhido:  # adaga
+                    self.luta.usar_pocao(self.item_escolhido, alvo, self.inventario)
+                else:
+                    acao = self.habilidade_escolhida or 'atacar'
+                    self.luta.executar_acao_jogador(acao, alvo)
                 self.modo = 'acao'
                 self.habilidade_escolhida = None
+                self.item_escolhido = None
             else:
                 # Clique fora de um alvo não cancela (só botão direito/ESC);
                 # os botões de ação ainda trocam de ação.
@@ -674,7 +791,9 @@ class Batalha:
                     else:
                         atual = self.luta.combatente_atual()
                         mana_antes = atual.mana
-                        if not self.aliado_valido(aliado):
+                        tipo = atual.HABILIDADES[self.habilidade_escolhida]['alvo']
+                        if not self.aliado_valido(aliado) and tipo != 'morto':
+                            # (reviver em alguém vivo já avisa sozinho)
                             registrar(f'{aliado.nome} não precisa de cura!'
                                       if aliado.vida > 0 else
                                       f'{aliado.nome} está derrotado!')
@@ -741,11 +860,51 @@ class Batalha:
 
         self.desenhar_inimigos(tela, mouse, atual)
         self.desenhar_personagens(tela, mouse, atual)
+        self.desenhar_invocacoes(tela, atual)
         self.desenhar_log(tela, atual)
         self.desenhar_menu(tela, mouse, atual)
 
+        self.desenhar_numeros_dano(tela)
+
         if self.luta.resultado:
             self.desenhar_fim(tela)
+
+    # ---------- efeitos de dano ----------
+    def sprite_com_dano(self, combatente, img, rect, fator, acima=10):
+        """Lê os danos novos do combatente e devolve (imagem, rect) já com o
+        pulo de tamanho e o brilho branco aplicados."""
+        agora = pygame.time.get_ticks()
+        if combatente.danos_recentes:
+            self.ultimo_dano[id(combatente)] = agora
+            # Vários danos de uma vez (ex.: ataque múltiplo) saem um pouco
+            # acima um do outro, para não ficarem sobrepostos.
+            for n, valor in enumerate(combatente.danos_recentes):
+                self.numeros_dano.append(
+                    [texto_dano(valor), rect.centerx, rect.y - acima - n * 26, agora])
+            combatente.danos_recentes.clear()
+
+        t = agora - self.ultimo_dano.get(id(combatente), -10 ** 9)
+        if t < DURACAO_PULO:
+            fator *= 1 + (ESCALA_DANO - 1) * math.sin(math.pi * t / DURACAO_PULO)
+        img_final, rect_final = ampliar(img, rect, fator, 'midbottom')
+
+        if t < DURACAO_PISCADA:
+            branca = silhueta_branca(img_final)
+            branca.set_alpha(round(255 * (1 - t / DURACAO_PISCADA)))
+            img_final = img_final.copy()
+            img_final.blit(branca, (0, 0))
+        return img_final, rect_final
+
+    def desenhar_numeros_dano(self, tela):
+        agora = pygame.time.get_ticks()
+        self.numeros_dano = [n for n in self.numeros_dano
+                             if agora - n[3] < DURACAO_NUMERO]
+        for img, x, y, inicio in self.numeros_dano:
+            progresso_t = (agora - inicio) / DURACAO_NUMERO
+            # sobe rápido no começo e desacelera; some aos poucos
+            subida = SUBIDA_NUMERO * (1 - (1 - progresso_t) ** 2)
+            img.set_alpha(round(255 * (1 - progresso_t)))
+            tela.blit(img, img.get_rect(midbottom=(x, round(y - subida))))
 
     def desenhar_personagens(self, tela, mouse, atual):
         for i, p in enumerate(self.grupo):
@@ -755,13 +914,22 @@ class Batalha:
             # Quem está na vez fica maior (cresce para cima, pés no lugar)
             na_vez = p is atual and p.vida > 0 and not self.luta.resultado
             fator = self.zoom.escala(('personagem', id(p)), na_vez, ESCALA_TURNO)
-            img, rect_sprite = ampliar(normal if p.vida > 0 else morto, rect,
-                                       fator, 'midbottom')
+            img, rect_sprite = self.sprite_com_dano(
+                p, normal if p.vida > 0 else morto, rect, fator)
+
+            # Intangível: sprite meio transparente
+            if p.intangivel > 0 and p.vida > 0:
+                img = img.copy()
+                img.set_alpha(110)
             tela.blit(img, rect_sprite)
 
             # Defendendo: contorno azul no sprite
             if p.defendendo and p.vida > 0:
                 pygame.draw.rect(tela, (80, 160, 255), rect_sprite.inflate(6, 6), 3)
+
+            # Provocando: contorno vermelho (os inimigos só atacam ele)
+            if p.provocacao > 0 and p.vida > 0:
+                pygame.draw.rect(tela, (230, 50, 50), rect_sprite.inflate(14, 14), 3)
 
             # Nome logo abaixo do sprite, depois a barra de vida e a de mana
             texto(tela, p.nome, (rect.centerx, rect.bottom + 14),
@@ -781,6 +949,34 @@ class Batalha:
             if p is atual and p.vida > 0:
                 desenhar_cursor(tela, rect_sprite.centerx, rect_sprite.y - 4)
 
+    def desenhar_invocacoes(self, tela, atual):
+        for k, inv in enumerate(self.luta.invocacoes):
+            if id(inv) not in self.sprites:
+                img = carregar_sprite(inv.SPRITE, TAM_INVOCACAO, PERSONAGENS)
+                self.sprites[id(inv)] = (img, escurecer(img))
+            normal, _ = self.sprites[id(inv)]
+
+            # pés alinhados com os da linha da frente
+            base = LINHAS_Y[0] + TAM_PERSONAGEM
+            rect = pygame.Rect(X_INVOCACAO + k * (TAM_INVOCACAO + 20),
+                               base - TAM_INVOCACAO, TAM_INVOCACAO, TAM_INVOCACAO)
+
+            na_vez = inv is atual and inv.vida > 0 and not self.luta.resultado
+            fator = self.zoom.escala(('invocacao', id(inv)), na_vez, ESCALA_TURNO)
+            # (chamado mesmo destruída, para o número do último dano aparecer)
+            img, rect_sprite = self.sprite_com_dano(inv, normal, rect, fator)
+            if inv.vida <= 0:
+                continue  # destruída: some da tela
+
+            tela.blit(img, rect_sprite)
+            texto(tela, inv.nome, (rect.centerx, rect.bottom + 14),
+                  fonte_nome, centro=True)
+            barra_vida(tela, rect.x, rect.bottom + 28, rect.width, inv,
+                       moldura_invocacao)
+
+            if inv is atual:
+                desenhar_cursor(tela, rect_sprite.centerx, rect_sprite.y - 4)
+
     def desenhar_inimigos(self, tela, mouse, atual):
         sobre = self.inimigo_na_posicao(mouse) if self.modo == 'alvo' else None
 
@@ -796,8 +992,9 @@ class Batalha:
             # Alvo debaixo do mouse fica um pouco maior (pés no lugar)
             fator = self.zoom.escala(('inimigo', id(inimigo)),
                                      vivo and inimigo is sobre, ESCALA_HOVER_INIMIGO)
-            img, rect_sprite = ampliar(normal if vivo else morto, rect,
-                                       fator, 'midbottom')
+            img, rect_sprite = self.sprite_com_dano(
+                inimigo, normal if vivo else morto, rect, fator,
+                acima=34)  # acima do nome
 
             # Nome sobre a cabeça, sprite, barra de vida embaixo dos pés
             nome = inimigo.nome + (' (DEF)' if inimigo.defendendo else '')
@@ -819,6 +1016,9 @@ class Batalha:
             return None
         if self.vez_do_jogador():
             if self.modo == 'alvo':
+                if self.item_escolhido:
+                    nome = itens.nome_pocao(self.item_escolhido)
+                    return f'{nome}: escolha o alvo (botão direito volta)', (255, 255, 255)
                 if self.habilidade_escolhida:
                     nome = atual.HABILIDADES[self.habilidade_escolhida]['nome']
                     return f'{nome}: escolha o alvo (botão direito volta)', (255, 255, 255)
@@ -826,7 +1026,7 @@ class Batalha:
             if self.modo == 'habilidades':
                 return 'Escolha uma habilidade (botão direito volta)', (255, 255, 255)
             if self.modo == 'itens':
-                return 'Escolha uma poção (botão direito volta)', (255, 255, 255)
+                return 'Escolha um item (botão direito volta)', (255, 255, 255)
             if self.modo == 'alvo_aliado':
                 if self.item_escolhido:
                     nome = itens.nome_pocao(self.item_escolhido)
@@ -860,6 +1060,8 @@ class Batalha:
     def botao_escolhido(self):
         """Qual botão de ação está em uso agora (fica ampliado até a ação acontecer)."""
         if self.modo == 'alvo':
+            if self.item_escolhido:
+                return 'itens'
             return 'habilidades' if self.habilidade_escolhida else 'atacar'
         if self.modo == 'alvo_aliado':
             return 'itens' if self.item_escolhido else 'habilidades'
@@ -893,7 +1095,10 @@ class Batalha:
             tela.blit(sombra, CAIXA_MENU)
 
     def desenhar_quadro(self, tela, mouse, atual):
-        tela.blit(quadro_habilidades, RECT_QUADRO)
+        if self.modo == 'itens':
+            tela.blit(quadro_itens, RECT_QUADRO_ITENS)
+        else:
+            tela.blit(quadro_habilidades, RECT_QUADRO)
 
         desenhos = []
         for rect, tipo, dados in self.botoes_quadro(atual):
