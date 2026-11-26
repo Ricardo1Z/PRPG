@@ -82,8 +82,9 @@ O grupo começa com alguns itens e ganha mais ao vencer as lutas. Quanto mais av
 Requisitos: **Python 3** e **Pygame 2.6.1**.
 
 ```bash
+git clone https://github.com/Ricardo1Z/PRPG.git
+cd PRPG
 pip install -r requeriments.txt
-cd Jogo
 python main.py
 ```
 
